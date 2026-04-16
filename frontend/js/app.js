@@ -167,7 +167,7 @@ window.renderError = function(err, container) {
 initTheme();
 
 // Global feature flags
-window.ServerFeatures = { upload: false, delete: false, create_bucket: false };
+window.ServerFeatures = { upload: false, delete: false, create_bucket: false, bucket_count: true };
 
 // Check backend health and feature flags
 API.health()
@@ -177,6 +177,7 @@ API.health()
       window.ServerFeatures.upload = !!data.features.upload;
       window.ServerFeatures.delete = !!data.features.delete;
       window.ServerFeatures.create_bucket = !!data.features.create_bucket;
+      window.ServerFeatures.bucket_count = data.features.bucket_count !== false;
       const createBucketBtn = document.getElementById('createBucketBtn');
       if (createBucketBtn) {
         createBucketBtn.hidden = !window.ServerFeatures.create_bucket;

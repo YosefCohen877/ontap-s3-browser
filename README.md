@@ -152,6 +152,7 @@ All settings are in `.env`. Key variables:
 | `ENABLE_UPLOAD` | — | `false` (read-only by default) |
 | `ENABLE_DELETE` | — | `false` (read-only by default) |
 | `ENABLE_CREATE_BUCKET` | — | `false` (read-only by default) |
+| `ENABLE_BUCKET_COUNT` | — | `true` (show file count per bucket; disable for large buckets) |
 
 See `.env.example` for all options with documentation.
 

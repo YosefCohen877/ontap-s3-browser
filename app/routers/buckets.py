@@ -128,6 +128,14 @@ def bucket_object_count(
     username: str = Depends(require_auth),
 ):
     """Return the total number of objects in a bucket."""
+    cfg = get_settings()
+    if not cfg.enable_bucket_count:
+        raise HTTPException(status_code=403, detail={
+            "category": "feature_disabled",
+            "title": "Bucket Count Disabled",
+            "message": "File counting is disabled for this deployment.",
+            "detail": "Set ENABLE_BUCKET_COUNT=true to enable this feature.",
+        })
     try:
         enforce_bucket_access(bucket)
         now = time.time()

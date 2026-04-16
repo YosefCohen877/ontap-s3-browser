@@ -137,6 +137,7 @@ window.BucketView = (() => {
         <div class="bucket-card__meta">
           <span class="bucket-card__date">${b.created ? formatDate(b.created) : 'No date'}</span>
           <span class="bucket-card__count">${
+            !window.ServerFeatures?.bucket_count ? '' :
             _isFresh(cache[b.name]) ? _formatCount(cache[b.name].count, true) : 'Counting files…'
           }</span>
         </div>
@@ -152,6 +153,7 @@ window.BucketView = (() => {
   }
 
   async function _loadBucketCounts(loadToken) {
+    if (!window.ServerFeatures?.bucket_count) return;
     if (_countAbortController) _countAbortController.abort();
     _countAbortController = new AbortController();
 
