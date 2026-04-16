@@ -165,33 +165,51 @@ def test_connection(username: str = Depends(require_auth)):
 
         except ssl.SSLCertVerificationError as exc:
             duration = (time.monotonic() - t0) * 1000
-            results.append(_step_result(
-                3, "TLS Handshake", "failed",
-                f"Certificate verification failed: {exc}. Set S3_CA_BUNDLE to your internal CA.",
-                detail=str(exc),
-                duration_ms=duration,
-            ))
-            logger.error("test_connection.tls.cert_error", error=str(exc))
-            overall = "failed"
-            return {"overall": overall, "endpoint": cfg.s3_endpoint_url, "steps": results}
+            if not cfg.s3_verify_ssl:
+                results.append(_step_result(
+                    3, "TLS Handshake", "skipped",
+                    f"Certificate invalid but S3_VERIFY_SSL=false — verification skipped. Issue: {exc}",
+                    detail=str(exc),
+                    duration_ms=duration,
+                ))
+                logger.warning("test_connection.tls.cert_skipped", error=str(exc))
+            else:
+                results.append(_step_result(
+                    3, "TLS Handshake", "failed",
+                    f"Certificate verification failed: {exc}. Set S3_CA_BUNDLE to your internal CA.",
+                    detail=str(exc),
+                    duration_ms=duration,
+                ))
+                logger.error("test_connection.tls.cert_error", error=str(exc))
+                overall = "failed"
+                return {"overall": overall, "endpoint": cfg.s3_endpoint_url, "steps": results}
 
         except ssl.SSLError as exc:
             duration = (time.monotonic() - t0) * 1000
-            hint = (
-                "ONTAP TLS negotiation failed — check that ONTAP allows TLS 1.2 and "
-                "the ciphers supported by this Python version."
-                if "WRONG_VERSION_NUMBER" in str(exc) or "handshake" in str(exc).lower()
-                else str(exc)
-            )
-            results.append(_step_result(
-                3, "TLS Handshake", "failed",
-                f"TLS error: {hint}",
-                detail=str(exc),
-                duration_ms=duration,
-            ))
-            logger.error("test_connection.tls.ssl_error", error=str(exc))
-            overall = "failed"
-            return {"overall": overall, "endpoint": cfg.s3_endpoint_url, "steps": results}
+            if not cfg.s3_verify_ssl:
+                results.append(_step_result(
+                    3, "TLS Handshake", "skipped",
+                    f"TLS error but S3_VERIFY_SSL=false — verification skipped. Issue: {exc}",
+                    detail=str(exc),
+                    duration_ms=duration,
+                ))
+                logger.warning("test_connection.tls.ssl_skipped", error=str(exc))
+            else:
+                hint = (
+                    "ONTAP TLS negotiation failed — check that ONTAP allows TLS 1.2 and "
+                    "the ciphers supported by this Python version."
+                    if "WRONG_VERSION_NUMBER" in str(exc) or "handshake" in str(exc).lower()
+                    else str(exc)
+                )
+                results.append(_step_result(
+                    3, "TLS Handshake", "failed",
+                    f"TLS error: {hint}",
+                    detail=str(exc),
+                    duration_ms=duration,
+                ))
+                logger.error("test_connection.tls.ssl_error", error=str(exc))
+                overall = "failed"
+                return {"overall": overall, "endpoint": cfg.s3_endpoint_url, "steps": results}
 
     else:
         results.append(_step_result(

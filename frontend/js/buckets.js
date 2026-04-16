@@ -117,6 +117,25 @@ window.BucketView = (() => {
     document.getElementById('retryBucketsBtn')?.addEventListener('click', load);
   }
 
+  function _bucketCardHtml(b, cache) {
+    const denied = b.accessible === false;
+    return `
+      <div class="bucket-card${denied ? ' bucket-card--denied' : ''}" role="listitem" tabindex="0"
+           data-bucket="${_esc(b.name)}"
+           aria-label="${denied ? 'No access to' : 'Open'} bucket ${_esc(b.name)}">
+        <div class="bucket-card__icon">${_bucketIcon()}</div>
+        <div class="bucket-card__name">${_esc(b.name)}</div>
+        <div class="bucket-card__meta">
+          <span class="bucket-card__date">${b.created ? formatDate(b.created) : 'No date'}</span>
+          <span class="bucket-card__count">${
+            denied ? 'Access denied' :
+            !window.ServerFeatures?.bucket_count ? '' :
+            _isFresh(cache[b.name]) ? _formatCount(cache[b.name].count, true) : 'Counting files…'
+          }</span>
+        </div>
+      </div>`;
+  }
+
   function _renderBuckets(buckets) {
     const cache = _readCountCache();
     if (!buckets.length) {
@@ -128,21 +147,22 @@ window.BucketView = (() => {
       return;
     }
 
-    container.innerHTML = buckets.map(b => `
-      <div class="bucket-card" role="listitem" tabindex="0"
-           data-bucket="${b.name}"
-           aria-label="Open bucket ${b.name}">
-        <div class="bucket-card__icon">${_bucketIcon()}</div>
-        <div class="bucket-card__name">${_esc(b.name)}</div>
-        <div class="bucket-card__meta">
-          <span class="bucket-card__date">${b.created ? formatDate(b.created) : 'No date'}</span>
-          <span class="bucket-card__count">${
-            !window.ServerFeatures?.bucket_count ? '' :
-            _isFresh(cache[b.name]) ? _formatCount(cache[b.name].count, true) : 'Counting files…'
-          }</span>
-        </div>
-      </div>
-    `).join('');
+    const accessible = buckets.filter(b => b.accessible !== false);
+    const denied     = buckets.filter(b => b.accessible === false);
+
+    let html = accessible.map(b => _bucketCardHtml(b, cache)).join('');
+
+    if (denied.length) {
+      html += `<div class="bucket-section-header" style="grid-column:1/-1">
+        <svg viewBox="0 0 20 20" fill="currentColor" style="width:16px;height:16px;opacity:.5" aria-hidden="true">
+          <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/>
+        </svg>
+        Buckets without permission
+      </div>`;
+      html += denied.map(b => _bucketCardHtml(b, cache)).join('');
+    }
+
+    container.innerHTML = html;
 
     container.querySelectorAll('.bucket-card').forEach(card => {
       const openBucket = () => Nav.toBrowser(card.dataset.bucket, '');

@@ -99,16 +99,23 @@ def list_buckets(username: str = Depends(require_auth)):
         try:
             response = client.list_buckets()
             for b in response.get("Buckets", []):
+                name = b["Name"]
+                accessible = True
+                try:
+                    client.head_bucket(Bucket=name)
+                except Exception:
+                    accessible = False
                 buckets.append({
-                    "name": b["Name"],
+                    "name": name,
                     "created": b.get("CreationDate").isoformat() if b.get("CreationDate") else None,
+                    "accessible": accessible,
                 })
         except Exception as api_exc:
             logger.warning("buckets.list_api_failed", error=str(api_exc))
-            # API failed and no fallback buckets configured
             raise api_exc
 
-        logger.info("buckets.list", count=len(buckets), user=username)
+        accessible_count = sum(1 for b in buckets if b["accessible"])
+        logger.info("buckets.list", count=len(buckets), accessible=accessible_count, user=username)
         return {"buckets": buckets}
     except Exception as exc:
         info = classify_exception(exc)

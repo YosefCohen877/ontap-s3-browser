@@ -361,6 +361,37 @@ body {
 .bucket-card__date { font-size: .75rem; color: var(--clr-text-muted); }
 .bucket-card__count { font-size: .75rem; color: var(--clr-text); opacity: .8; }
 
+/* Denied bucket cards */
+.bucket-card--denied {
+  opacity: .5;
+  border-style: dashed;
+}
+.bucket-card--denied:hover {
+  border-color: var(--clr-border);
+  box-shadow: none;
+  transform: none;
+}
+.bucket-card--denied .bucket-card__icon {
+  background: var(--clr-surface-3);
+}
+.bucket-card--denied .bucket-card__count {
+  color: var(--clr-error);
+  opacity: 1;
+}
+
+/* Section header between accessible / denied buckets */
+.bucket-section-header {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .75rem 0 .25rem;
+  font-size: .8125rem;
+  font-weight: 600;
+  color: var(--clr-text-muted);
+  border-top: 1px solid var(--clr-border);
+  margin-top: .5rem;
+}
+
 /* ══ 7. Breadcrumb ═══════════════════════════════════════ */
 .breadcrumb {
   display: flex;
