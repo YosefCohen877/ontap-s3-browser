@@ -1,6 +1,6 @@
 # ontap-s3-browser
 
-A self-hosted, enterprise-grade web browser for **NetApp ONTAP S3** — built for internal environments where AWS-native defaults fail.
+A self-hosted, enterprise-grade web browser for **NetApp ONTAP S3** .
 
 > **Read-only by default.** Uploads and deletes are disabled unless explicitly enabled.
 
