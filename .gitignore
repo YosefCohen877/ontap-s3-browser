@@ -13,6 +13,7 @@ venv/
 env/
 .env
 *.env
+*.tar
 
 # IDE
 .vscode/

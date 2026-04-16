@@ -17,6 +17,7 @@ const views = {
   diagnostics: document.getElementById('viewDiagnostics'),
 };
 const navBtns = document.querySelectorAll('.nav-btn');
+const homeBtn = document.getElementById('homeBtn');
 const themeToggle  = document.getElementById('themeToggle');
 const statusDot    = document.getElementById('statusDot');
 const endpointLabel = document.getElementById('endpointLabel');
@@ -95,7 +96,7 @@ window.Nav = {
 // Handle Browser Back/Forward buttons
 window.addEventListener('popstate', (e) => {
   const path = window.location.pathname.substring(1); // remove leading /
-  if (!path) {
+  if (!path || path.toLowerCase() === 'home') {
     window.Nav.toBuckets(false);
   } else {
     const parts = path.split('/');
@@ -187,7 +188,7 @@ API.health()
 // ── Init Routing ──────────────────────────────────────────────────────────
 function initRouter() {
   const path = window.location.pathname.substring(1); // remove leading /
-  if (!path) {
+  if (!path || path.toLowerCase() === 'home') {
     showView('buckets');
     // window.BucketView.load() is called by the module itself on load
   } else {
@@ -201,6 +202,11 @@ function initRouter() {
 
 window.addEventListener('load', () => {
   initRouter();
+});
+
+// Brand/logo click goes back to home (bucket list)
+homeBtn?.addEventListener('click', () => {
+  window.Nav.toBuckets();
 });
 
 // ── Auto-refresh engine ────────────────────────────────────────────────────

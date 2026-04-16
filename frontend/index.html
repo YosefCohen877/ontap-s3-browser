@@ -6,18 +6,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ONTAP S3 Browser</title>
   <meta name="description" content="Self-hosted NetApp ONTAP S3 object browser for enterprise internal environments." />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
-    rel="stylesheet" />
   <link rel="stylesheet" href="/css/style.css" />
 </head>
 
 <body>
   <!-- ── Top Navigation Bar ─────────────────────────────── -->
   <header class="topbar" id="topbar">
-    <div class="topbar__brand">
+    <button class="topbar__brand" id="homeBtn" title="Go home" aria-label="Go to home view">
       <div class="topbar__logo">
         <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <rect width="32" height="32" rx="8" fill="url(#brandGrad)" />
@@ -37,7 +32,7 @@
         <span class="topbar__name">ONTAP S3 Browser</span>
         <span class="topbar__sub" id="endpointLabel">—</span>
       </div>
-    </div>
+    </button>
 
     <nav class="topbar__nav" aria-label="Main navigation">
       <button class="nav-btn" id="navBuckets" data-view="buckets" title="Buckets">

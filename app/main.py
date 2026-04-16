@@ -15,7 +15,9 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette import status
 
 from app.config import get_settings
 from app.routers import buckets, diagnostics, objects, preview
@@ -55,17 +57,25 @@ app.include_router(preview.router)
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
 
 if FRONTEND_DIR.is_dir():
-    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
-    logger.info("frontend.mounted", path=str(FRONTEND_DIR))
+    # Serve real static assets (css/, js/, images, etc.) from the frontend dir
+    app.mount("/css", StaticFiles(directory=str(FRONTEND_DIR / "css")), name="css")
+    app.mount("/js", StaticFiles(directory=str(FRONTEND_DIR / "js")), name="js")
 
-    # Catch-all route for SPA routing (must be after mount and routers)
-    from fastapi.responses import FileResponse
-    @app.get("/{path_name:path}")
-    async def catch_all(path_name: str):
-        index_file = FRONTEND_DIR / "index.html"
-        if index_file.exists():
-            return FileResponse(index_file)
-        return {"error": "index.html not found"}
+    _index_html = FRONTEND_DIR / "index.html"
+
+    @app.get("/{full_path:path}")
+    async def spa_fallback(full_path: str):
+        """
+        SPA catch-all: any path that isn't an /api route or a real static file
+        gets index.html so client-side routing works on browser refresh.
+        """
+        # Check if the requested path maps to a real file in the frontend dir
+        candidate = FRONTEND_DIR / full_path
+        if candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(_index_html)
+
+    logger.info("frontend.mounted", path=str(FRONTEND_DIR))
 else:
     logger.warning("frontend.missing", path=str(FRONTEND_DIR))
 

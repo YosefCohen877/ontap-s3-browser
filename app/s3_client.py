@@ -25,6 +25,9 @@ from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+# Hide unverified HTTPS request warnings when TLS verification is intentionally disabled.
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 # One client instance per process — protected by a lock during creation
 _client_lock = threading.Lock()
 _s3_client = None
