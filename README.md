@@ -1,8 +1,21 @@
 # ontap-s3-browser
 
-A self-hosted, enterprise-grade web browser for **NetApp ONTAP S3** — built for internal environments where AWS-native defaults fail.
+A self-hosted web UI for browsing, previewing, and managing objects on **NetApp ONTAP S3** — designed for air-gapped and internal environments where standard S3 tools break.
 
 > **Read-only by default.** Uploads and deletes are disabled unless explicitly enabled.
+
+## Features
+
+- **Browse & search** — Navigate buckets and folders, search objects, sort by name/size/date
+- **File preview** — Inline preview for text, JSON, images, PDFs, and video (MP4/WebM)
+- **Upload & delete** — Optional write operations, gated by feature flags
+- **Bucket permissions** — Automatically detects which buckets you can access and groups inaccessible ones separately
+- **Connection diagnostics** — Step-by-step probe (DNS → TCP → TLS → S3 API) with detailed error messages
+- **Deep linking** — Bookmark or share direct URLs to any bucket/folder; full SPA routing with browser back/forward
+- **Dark & light themes** — Toggle between dark and light mode
+- **Auto-refresh** — Configurable refresh interval with countdown ring
+- **Offline-friendly** — No external CDN dependencies; works fully air-gapped
+- **Restricted bucket mode** — Lock the instance to a single bucket via the endpoint URL
 
 ## Preview
 
@@ -182,7 +195,6 @@ The browser now behaves as a Single Page Application. You can bookmark specific 
 - `http://localhost:8080/my-bucket/logs/2024/`
 
 The application handles these URLs automatically, navigating to the correct path on startup and keeping the address bar in sync as you browse. The **Back** and **Forward** buttons in your browser are fully supported.
-See `.env.example` for all options with documentation.
 
 ---
 
@@ -217,7 +229,7 @@ ontap-s3-browser/
 │       ├── app.js           ← Theme, routing, toasts, helpers
 │       ├── buckets.js       ← Bucket grid view
 │       ├── browser.js       ← Object browser + detail pane
-│       ├── preview.js       ← Text/JSON/image/PDF preview
+│       ├── preview.js       ← Text/JSON/image/PDF/video preview
 │       └── diagnostics.js   ← Connection test view
 ├── certs/                   ← Drop custom CA .crt files here
 │   ├── .gitignore           ← Ignore cert files
@@ -300,7 +312,7 @@ Common ONTAP-specific error messages and fixes:
 
 ---
 
-## host networking mode
+## Host Networking Mode
 
 If your ONTAP S3 endpoint is only resolvable on the host (not inside a Docker bridge network):
 
@@ -358,19 +370,24 @@ Refer to [Traefik documentation](https://doc.traefik.io/traefik/) for full setup
 
 ---
 
+## API Routes
+
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/health` | Liveness probe |
+| GET | `/api/health` | Liveness probe + feature flags |
 | GET | `/api/test-connection` | Step-by-step ONTAP connectivity test |
-| GET | `/api/buckets` | List all buckets |
+| GET | `/api/buckets` | List all buckets (with access check) |
 | POST | `/api/bucket?bucket=` | Create a bucket (when enabled) |
+| GET | `/api/bucket-count?bucket=` | Object count for a bucket (when enabled) |
 | GET | `/api/objects?bucket=&prefix=&search=&sort=&order=` | List objects/prefixes |
 | GET | `/api/object/meta?bucket=&key=` | HEAD object metadata |
 | GET | `/api/object/download?bucket=&key=` | Stream object download |
-| GET | `/api/object/preview?bucket=&key=` | In-browser preview |
+| GET | `/api/object/preview?bucket=&key=` | In-browser preview (text/image/PDF/video) |
+| POST | `/api/object/upload` | Upload a file (when enabled) |
+| DELETE | `/api/object?bucket=&key=` | Delete an object (when enabled) |
 | GET | `/api/docs` | FastAPI interactive docs (Swagger UI) |
 
-All routes require HTTP Basic Auth.
+All routes except `/api/health` require HTTP Basic Auth.
 
 ---
 
