@@ -6,7 +6,7 @@ If you discover a security vulnerability in this project, please report it respo
 
 **Do not** create public GitHub issues for security vulnerabilities.
 
-Instead, please email security concerns to: [your-email@example.com]
+Instead, please email security concerns to: [cyosef22@gmail.com]
 
 Include:
 - Description of the vulnerability
