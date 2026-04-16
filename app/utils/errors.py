@@ -121,6 +121,20 @@ def classify_exception(exc: Exception) -> S3ErrorInfo:
         code = exc.response.get("Error", {}).get("Code", "Unknown")
         msg = exc.response.get("Error", {}).get("Message", exc_str)
 
+        if code == "NotImplemented":
+            return S3ErrorInfo(
+                category="not_implemented",
+                title="Operation Not Supported by ONTAP S3",
+                message=(
+                    "ONTAP S3 returned NotImplemented for this operation. "
+                    "Bucket creation via the S3 API is only supported on newer ONTAP versions "
+                    "(CreateBucket support starts in ONTAP 9.11.1) and may require ONTAP-side configuration. "
+                    "Create the bucket using ONTAP System Manager or the ONTAP CLI, or upgrade ONTAP."
+                ),
+                detail=f"[{code}] {msg}",
+                http_code=501,
+            )
+
         if code in ("InvalidAccessKeyId", "InvalidAccessKey"):
             return S3ErrorInfo(
                 category="auth_failure_key",

@@ -12,6 +12,10 @@ window.BrowserView = (() => {
   const objectCountLabel = document.getElementById('objectCountLabel');
   const sortSelect   = document.getElementById('sortSelect');
   const sortOrderBtn = document.getElementById('sortOrderBtn');
+  const pageSizeSelect = document.getElementById('pageSizeSelect');
+  const prevPageBtn = document.getElementById('prevPageBtn');
+  const nextPageBtn = document.getElementById('nextPageBtn');
+  const pageLabel = document.getElementById('pageLabel');
   const refreshBrowser = document.getElementById('refreshBrowserBtn');
   const uploadWrap   = document.getElementById('uploadWrap');
   const uploadInput  = document.getElementById('uploadInput');
@@ -19,10 +23,21 @@ window.BrowserView = (() => {
 
   let _bucket  = '';
   let _prefix  = '';
-  let _sort    = 'name';
-  let _order   = 'asc';
+  let _sort    = 'modified';
+  let _order   = 'desc';
   let _search  = '';
   let _searchTimer = null;
+  let _pageSize = 20;
+  let _nextToken = null;
+  let _tokenHistory = [];
+  let _pageNumber = 1;
+  const FILE_COUNT_CACHE_KEY = 's3b-file-count-cache';
+  function _setPagerControls() {
+    if (prevPageBtn) prevPageBtn.disabled = _tokenHistory.length === 0;
+    if (nextPageBtn) nextPageBtn.disabled = !_nextToken;
+    if (pageLabel) pageLabel.textContent = `Page ${_pageNumber}`;
+  }
+
 
   // ── Icons ────────────────────────────────────────────────────────────────
   const ICON_FOLDER = `<svg viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>`;
@@ -30,6 +45,26 @@ window.BrowserView = (() => {
 
   function _esc(str) {
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function _countCacheId(bucket, prefix, search) {
+    return `${bucket}|${prefix || ''}|${search || ''}`;
+  }
+
+  function _readCountCache() {
+    try {
+      return JSON.parse(localStorage.getItem(FILE_COUNT_CACHE_KEY) || '{}');
+    } catch {
+      return {};
+    }
+  }
+
+  function _writeCountCache(cache) {
+    try {
+      localStorage.setItem(FILE_COUNT_CACHE_KEY, JSON.stringify(cache));
+    } catch {
+      // Ignore storage quota/privacy errors.
+    }
   }
 
   // ── Breadcrumb ───────────────────────────────────────────────────────────
@@ -193,9 +228,16 @@ window.BrowserView = (() => {
   }
 
   // ── load ─────────────────────────────────────────────────────────────────
-  async function load(bucket, prefix = '') {
+  async function load(bucket, prefix = '', resetPage = true) {
+    const changedPath = _bucket !== bucket || _prefix !== prefix;
     _bucket = bucket;
     _prefix = prefix;
+    if (changedPath || resetPage) {
+      _nextToken = null;
+      _tokenHistory = [];
+      _pageNumber = 1;
+      _setPagerControls();
+    }
     _renderBreadcrumb(bucket, prefix);
     _renderSkeleton();
 
@@ -216,15 +258,27 @@ window.BrowserView = (() => {
 
     try {
       if (objectCountLabel) {
-        objectCountLabel.textContent = 'Loading…';
+        const countCache = _readCountCache();
+        const cacheId = _countCacheId(bucket, prefix, _search);
+        const cachedCount = countCache[cacheId];
+        objectCountLabel.textContent = Number.isFinite(cachedCount)
+          ? `${cachedCount.toLocaleString()} file${cachedCount === 1 ? '' : 's'} (cached)`
+          : 'Loading…';
       }
-      const data = await API.listObjects(bucket, prefix, _search, _sort, _order);
+      const tokenForRequest = _tokenHistory.length ? _tokenHistory[_tokenHistory.length - 1] : '';
+      const data = await API.listObjects(bucket, prefix, _search, _sort, _order, _pageSize, tokenForRequest);
       _renderItems(data.items);
+      _nextToken = data.next_token || null;
+      _setPagerControls();
       if (objectCountLabel) {
         const fileCount = data.items.filter(item => item.type === 'object').length;
+        const countCache = _readCountCache();
+        countCache[_countCacheId(bucket, prefix, _search)] = fileCount;
+        _writeCountCache(countCache);
+        const fileLabel = `${fileCount.toLocaleString()} file${fileCount === 1 ? '' : 's'}`;
         objectCountLabel.textContent = _search
-          ? `${fileCount.toLocaleString()} file${fileCount === 1 ? '' : 's'} matching "${_search}"`
-          : `${fileCount.toLocaleString()} file${fileCount === 1 ? '' : 's'}`;
+          ? `${fileLabel} matching "${_search}" (page size ${_pageSize})`
+          : `${fileLabel} (page size ${_pageSize})`;
       }
       document.getElementById('endpointLabel').textContent =
         `${bucket}${prefix ? ' / ' + prefix : ''}`;
@@ -241,7 +295,7 @@ window.BrowserView = (() => {
   // ── Sort & Search wiring ─────────────────────────────────────────────────
   sortSelect.addEventListener('change', () => {
     _sort = sortSelect.value;
-    load(_bucket, _prefix);
+    load(_bucket, _prefix, true);
   });
 
   sortOrderBtn.addEventListener('click', () => {
@@ -249,18 +303,37 @@ window.BrowserView = (() => {
     sortOrderBtn.dataset.order = _order;
     sortOrderBtn.querySelector('.icon-sort-asc').style.display = _order === 'asc' ? '' : 'none';
     sortOrderBtn.querySelector('.icon-sort-desc').style.display = _order === 'desc' ? '' : 'none';
-    load(_bucket, _prefix);
+    load(_bucket, _prefix, true);
   });
 
   searchInput.addEventListener('input', () => {
     clearTimeout(_searchTimer);
     _searchTimer = setTimeout(() => {
       _search = searchInput.value.trim();
-      load(_bucket, _prefix);
+      load(_bucket, _prefix, true);
     }, 350);
   });
 
-  refreshBrowser?.addEventListener('click', () => load(_bucket, _prefix));
+  pageSizeSelect?.addEventListener('change', () => {
+    _pageSize = parseInt(pageSizeSelect.value, 10) || 20;
+    load(_bucket, _prefix, true);
+  });
+
+  prevPageBtn?.addEventListener('click', () => {
+    if (!_tokenHistory.length) return;
+    _tokenHistory.pop();
+    _pageNumber = Math.max(1, _pageNumber - 1);
+    load(_bucket, _prefix, false);
+  });
+
+  nextPageBtn?.addEventListener('click', () => {
+    if (!_nextToken) return;
+    _tokenHistory.push(_nextToken);
+    _pageNumber += 1;
+    load(_bucket, _prefix, false);
+  });
+
+  refreshBrowser?.addEventListener('click', () => load(_bucket, _prefix, true));
 
   // ── Upload wiring ────────────────────────────────────────────────────────
   uploadBtn?.addEventListener('click', () => uploadInput?.click());
@@ -282,6 +355,15 @@ window.BrowserView = (() => {
     uploadInput.value = ''; // reset
     Nav.toBrowser(_bucket, _prefix, false); // Refresh list without pushing history
   });
+
+  if (sortSelect) sortSelect.value = _sort;
+  if (pageSizeSelect) pageSizeSelect.value = String(_pageSize);
+  if (sortOrderBtn) {
+    sortOrderBtn.dataset.order = _order;
+    sortOrderBtn.querySelector('.icon-sort-asc').style.display = _order === 'asc' ? '' : 'none';
+    sortOrderBtn.querySelector('.icon-sort-desc').style.display = _order === 'desc' ? '' : 'none';
+  }
+  _setPagerControls();
 
   return { load };
 })();

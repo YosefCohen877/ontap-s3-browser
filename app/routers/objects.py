@@ -30,6 +30,8 @@ def list_objects(
     search: str = Query("", description="Filter results by substring"),
     sort: str = Query("name", description="Sort field: name | size | modified"),
     order: str = Query("asc", description="Sort order: asc | desc"),
+    page_size: int = Query(20, ge=5, le=200, description="Items per page"),
+    continuation_token: Optional[str] = Query(None, description="Continuation token for paging"),
     username: str = Depends(require_auth),
 ):
     """
@@ -39,17 +41,24 @@ def list_objects(
     try:
         enforce_bucket_access(bucket)
         client = get_s3_client()
-        paginator = client.get_paginator("list_objects_v2")
-
         items = []
-        page_iter = paginator.paginate(
-            Bucket=bucket,
-            Prefix=prefix,
-            Delimiter="/",
-        )
+        next_token = continuation_token
+        scanned_pages = 0
 
-        for page in page_iter:
-            # Virtual folders
+        # Fetch until we fill one UI page with filtered results (or hit end).
+        while len(items) < page_size and scanned_pages < 20:
+            kwargs = {
+                "Bucket": bucket,
+                "Prefix": prefix,
+                "Delimiter": "/",
+                "MaxKeys": max(1, page_size - len(items)),
+            }
+            if next_token:
+                kwargs["ContinuationToken"] = next_token
+
+            page = client.list_objects_v2(**kwargs)
+            scanned_pages += 1
+
             for cp in page.get("CommonPrefixes", []):
                 folder_key = cp["Prefix"]
                 name = folder_key[len(prefix):].rstrip("/")
@@ -64,24 +73,32 @@ def list_objects(
                     "content_type": None,
                     "etag": None,
                 })
+                if len(items) >= page_size:
+                    break
 
-            # Objects
-            for obj in page.get("Contents", []):
-                key = obj["Key"]
-                if key == prefix:
-                    continue  # skip the "folder itself" placeholder
-                name = key[len(prefix):]
-                if search and search.lower() not in name.lower():
-                    continue
-                items.append({
-                    "type": "object",
-                    "key": key,
-                    "name": name,
-                    "size": obj.get("Size"),
-                    "modified": obj["LastModified"].isoformat() if obj.get("LastModified") else None,
-                    "content_type": None,
-                    "etag": obj.get("ETag", "").strip('"'),
-                })
+            if len(items) < page_size:
+                for obj in page.get("Contents", []):
+                    key = obj["Key"]
+                    if key == prefix:
+                        continue  # skip the "folder itself" placeholder
+                    name = key[len(prefix):]
+                    if search and search.lower() not in name.lower():
+                        continue
+                    items.append({
+                        "type": "object",
+                        "key": key,
+                        "name": name,
+                        "size": obj.get("Size"),
+                        "modified": obj["LastModified"].isoformat() if obj.get("LastModified") else None,
+                        "content_type": None,
+                        "etag": obj.get("ETag", "").strip('"'),
+                    })
+                    if len(items) >= page_size:
+                        break
+
+            next_token = page.get("NextContinuationToken")
+            if not next_token:
+                break
 
         # ── Sorting ───────────────────────────────────────────────────────
         reverse = order.lower() == "desc"
@@ -96,15 +113,24 @@ def list_objects(
             return (item["type"] == "object", item["name"].lower())
 
         items.sort(key=_sort_fn, reverse=reverse)
+        items = items[:page_size]
 
         logger.info(
             "objects.list",
             bucket=bucket,
             prefix=prefix,
             count=len(items),
+            page_size=page_size,
+            has_more=bool(next_token),
             user=username,
         )
-        return {"bucket": bucket, "prefix": prefix, "items": items}
+        return {
+            "bucket": bucket,
+            "prefix": prefix,
+            "items": items,
+            "next_token": next_token,
+            "has_more": bool(next_token),
+        }
 
     except Exception as exc:
         info = classify_exception(exc)

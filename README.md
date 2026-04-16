@@ -1,6 +1,6 @@
 # ontap-s3-browser
 
-A self-hosted, enterprise-grade web browser for **NetApp ONTAP S3** .
+A self-hosted, enterprise-grade web browser for **NetApp ONTAP S3** — built for internal environments where AWS-native defaults fail.
 
 > **Read-only by default.** Uploads and deletes are disabled unless explicitly enabled.
 
@@ -151,6 +151,7 @@ All settings are in `.env`. Key variables:
 | `WEB_USERNAME` | — | `admin` |
 | `ENABLE_UPLOAD` | — | `false` (read-only by default) |
 | `ENABLE_DELETE` | — | `false` (read-only by default) |
+| `ENABLE_CREATE_BUCKET` | — | `false` (read-only by default) |
 
 See `.env.example` for all options with documentation.
 
@@ -361,6 +362,7 @@ Refer to [Traefik documentation](https://doc.traefik.io/traefik/) for full setup
 | GET | `/api/health` | Liveness probe |
 | GET | `/api/test-connection` | Step-by-step ONTAP connectivity test |
 | GET | `/api/buckets` | List all buckets |
+| POST | `/api/bucket?bucket=` | Create a bucket (when enabled) |
 | GET | `/api/objects?bucket=&prefix=&search=&sort=&order=` | List objects/prefixes |
 | GET | `/api/object/meta?bucket=&key=` | HEAD object metadata |
 | GET | `/api/object/download?bucket=&key=` | Stream object download |

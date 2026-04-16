@@ -82,6 +82,12 @@
       <div class="view__header">
         <h1 class="view__title">Buckets</h1>
         <div class="refresh-group">
+          <button class="btn btn--primary btn--sm" id="createBucketBtn" title="Create bucket" hidden>
+            <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+            </svg>
+            Create Bucket
+          </button>
           <div class="refresh-ctrl" title="Auto-refresh interval">
             <svg class="refresh-ring" viewBox="0 0 32 32" aria-hidden="true">
               <circle class="refresh-ring__track" cx="16" cy="16" r="12" />
@@ -158,9 +164,9 @@
             <div class="sort-wrap">
               <label class="sr-only" for="sortSelect">Sort by</label>
               <select class="select" id="sortSelect" aria-label="Sort field">
+                <option value="modified">Last Modified</option>
                 <option value="name">Name</option>
                 <option value="size">Size</option>
-                <option value="modified">Modified</option>
               </select>
               <button class="icon-btn sort-order-btn" id="sortOrderBtn" title="Toggle sort order"
                 aria-label="Toggle sort order" data-order="asc">
@@ -174,6 +180,12 @@
                     d="M3 3a1 1 0 000 2h11a1 1 0 100-2H3zM3 7a1 1 0 000 2h7a1 1 0 100-2H3zM3 11a1 1 0 100 2h4a1 1 0 100-2H3zM15 13a1 1 0 102 0V7.414l1.293 1.293a1 1 0 001.414-1.414l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L15 7.414V13z" />
                 </svg>
               </button>
+              <label class="sr-only" for="pageSizeSelect">Items per page</label>
+              <select class="select" id="pageSizeSelect" aria-label="Items per page">
+                <option value="20" selected>20</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
             </div>
             <div class="upload-wrap" id="uploadWrap" style="display:none;">
               <input type="file" id="uploadInput" multiple hidden aria-hidden="true">
@@ -188,6 +200,11 @@
 
           <div id="objectList" class="object-list" role="list" aria-live="polite">
             <!-- Populated by browser.js -->
+          </div>
+          <div class="refresh-group" style="justify-content:flex-end;">
+            <button class="btn btn--ghost btn--sm" id="prevPageBtn" title="Previous page">Previous</button>
+            <span class="refresh-last" id="pageLabel" style="display:inline-block;">Page 1</span>
+            <button class="btn btn--ghost btn--sm" id="nextPageBtn" title="Next page">Next</button>
           </div>
         </div>
 

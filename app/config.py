@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     # ── Feature flags ───────────────────────────────────────────────────────
     enable_upload: bool = False
     enable_delete: bool = False
+    enable_create_bucket: bool = False
 
     @model_validator(mode="before")
     @classmethod

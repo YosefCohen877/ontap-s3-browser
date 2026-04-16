@@ -47,14 +47,16 @@ window.API = (() => {
     health:          ()         => _fetch('/api/health'),
     testConnection:  ()         => _fetch('/api/test-connection'),
     listBuckets:     ()         => _fetch('/api/buckets'),
-    listObjects:     (bucket, prefix = '', search = '', sort = 'name', order = 'asc') =>
-      _fetch(`/api/objects?bucket=${encodeURIComponent(bucket)}&prefix=${encodeURIComponent(prefix)}&search=${encodeURIComponent(search)}&sort=${sort}&order=${order}`),
+    createBucket:    (bucket)   =>
+      _fetch(`/api/bucket?bucket=${encodeURIComponent(bucket)}`, { method: 'POST' }),
+    listObjects:     (bucket, prefix = '', search = '', sort = 'name', order = 'asc', pageSize = 20, continuationToken = '') =>
+      _fetch(`/api/objects?bucket=${encodeURIComponent(bucket)}&prefix=${encodeURIComponent(prefix)}&search=${encodeURIComponent(search)}&sort=${sort}&order=${order}&page_size=${pageSize}${continuationToken ? `&continuation_token=${encodeURIComponent(continuationToken)}` : ''}`),
     objectMeta:      (bucket, key) =>
       _fetch(`/api/object/meta?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`),
     previewObject:   (bucket, key) =>
       _fetch(`/api/object/preview?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`),
-    bucketObjectCount: (bucket) =>
-      _fetch(`/api/bucket-count?bucket=${encodeURIComponent(bucket)}`),
+    bucketObjectCount: (bucket, refresh = false, signal = undefined) =>
+      _fetch(`/api/bucket-count?bucket=${encodeURIComponent(bucket)}&refresh=${refresh ? 'true' : 'false'}`, { signal }),
     downloadUrl:     (bucket, key) =>
       `/api/object/download?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`,
     uploadObject:    async (bucket, prefix, file) => {

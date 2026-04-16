@@ -55,6 +55,7 @@ def health():
         "features": {
             "upload": cfg.enable_upload,
             "delete": cfg.enable_delete,
+            "create_bucket": cfg.enable_create_bucket,
         }
     }
 
