@@ -31,6 +31,8 @@ TEXT_EXTENSIONS = {
     ".properties", ".env", ".toml",
 }
 IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml"}
+VIDEO_TYPES = {"video/mp4", "video/webm", "video/ogg"}
+VIDEO_EXTENSIONS = {".mp4", ".webm", ".ogv", ".ogg"}
 PDF_TYPE = "application/pdf"
 
 
@@ -46,6 +48,14 @@ def _is_text(content_type: str, key: str) -> bool:
 def _is_image(content_type: str) -> bool:
     base = (content_type or "").split(";")[0].strip().lower()
     return base in IMAGE_TYPES
+
+
+def _is_video(content_type: str, key: str) -> bool:
+    base = (content_type or "").split(";")[0].strip().lower()
+    if base in VIDEO_TYPES:
+        return True
+    ext = "." + key.rsplit(".", 1)[-1].lower() if "." in key else ""
+    return ext in VIDEO_EXTENSIONS
 
 
 def _is_pdf(content_type: str) -> bool:
@@ -149,6 +159,29 @@ def preview_object(
             return StreamingResponse(
                 _pdf_stream(),
                 media_type="application/pdf",
+                headers={"Content-Length": str(size), "Content-Disposition": "inline"},
+            )
+
+        # ── Video inline stream ────────────────────────────────────────────
+        if _is_video(content_type, key):
+            if size > BINARY_PREVIEW_LIMIT:
+                raise HTTPException(status_code=413, detail={
+                    "category": "preview_too_large",
+                    "title": "File Too Large for Preview",
+                    "message": f"Video is {size // (1024*1024)} MB — download it instead.",
+                    "detail": None,
+                })
+            resp = client.get_object(Bucket=bucket, Key=key)
+            media = content_type if content_type.split(";")[0].strip().lower() in VIDEO_TYPES else "video/mp4"
+
+            def _video_stream():
+                body = resp["Body"]
+                while chunk := body.read(1024 * 1024):
+                    yield chunk
+
+            return StreamingResponse(
+                _video_stream(),
+                media_type=media,
                 headers={"Content-Length": str(size), "Content-Disposition": "inline"},
             )
 

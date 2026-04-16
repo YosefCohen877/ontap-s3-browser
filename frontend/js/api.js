@@ -37,7 +37,7 @@ window.API = (() => {
 
     // For streaming responses (download/preview image|pdf) return raw Response
     const ct = response.headers.get('content-type') || '';
-    if (ct.startsWith('image/') || ct === 'application/pdf' || ct === 'application/octet-stream') {
+    if (ct.startsWith('image/') || ct.startsWith('video/') || ct === 'application/pdf' || ct === 'application/octet-stream') {
       return response;
     }
     return response.json();

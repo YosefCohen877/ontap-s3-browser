@@ -65,6 +65,16 @@ window.PreviewView = (() => {
         `;
         return;
       }
+      if (ct.startsWith('video/')) {
+        const blob = await data.blob();
+        const url  = URL.createObjectURL(blob);
+        container.innerHTML = `
+          <div class="preview-label">Video Preview</div>
+          <video class="preview-video" src="${url}" controls playsinline
+                 style="max-width:100%;max-height:400px;display:block;margin:.75rem auto"></video>
+        `;
+        return;
+      }
       if (ct === 'application/pdf') {
         const blob = await data.blob();
         const url  = URL.createObjectURL(blob);
