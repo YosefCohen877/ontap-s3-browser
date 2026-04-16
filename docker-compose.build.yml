@@ -1,0 +1,72 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# docker-compose.build.yml — Build from source
+#
+# Use this to build the image locally (e.g., for development or customization).
+#
+# Usage:
+#   docker compose -f docker-compose.build.yml up --build -d
+#
+# For most users, use the default docker-compose.yml instead, which pulls the
+# pre-built image from GitHub Container Registry.
+# ══════════════════════════════════════════════════════════════════════════════
+
+services:
+  ontap-s3-browser:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ontap-s3-browser:latest
+    container_name: ontap-s3-browser
+    restart: unless-stopped
+
+    # ── Port mapping ───────────────────────────────────────────────────────
+    # Comment this out and use network_mode: host instead if the container
+    # needs to resolve internal hostnames that only exist on the host network.
+    ports:
+      - "${APP_PORT:-8080}:8080"
+
+    # ── Host networking (alternative to ports above) ───────────────────────
+    # Uncomment the next line and comment out `ports` if you need the container
+    # to use the host's network stack directly (required for some internal DNS).
+    # network_mode: host
+
+    # ── Static hostname mappings ───────────────────────────────────────────
+    # Add entries here for internal S3 endpoints not in your DNS.
+    # Format: "hostname:ip"
+    extra_hosts:
+      - "ontap-s3:192.168.1.100"   # Replace with your ONTAP S3 IP
+      # - "ontap-s3.internal:10.0.0.50"  # Add more as needed
+
+    # ── Environment from .env file ─────────────────────────────────────────
+    env_file:
+      - .env
+
+    # ── Health check ──────────────────────────────────────────────────────
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # ── Logging ──────────────────────────────────────────────────────────
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+#You can add more services here, such as a local MinIO server for testing, but remember to adjust the S3 endpoint in your app's configuration accordingly.
+#  mini:
+#    container_name: mini
+#    image: docker.io/minio/minio
+#    command: server /data
+#    ports:
+#      - 9000:9000
+#      - 9001:9001
+#    environment:
+#      - MINIO_ACCESS_KEY=s3manager
+#      - MINIO_SECRET_KEY=s3manager
+#      - MINIO_ADDRESS=0.0.0.0:9000
+#      - MINIO_CONSOLE_ADDRESS=0.0.0.0:9001
