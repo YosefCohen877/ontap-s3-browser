@@ -2,8 +2,8 @@
 # Dockerfile — ontap-s3-browser
 #
 # Stages:
-#   1. Build layer: install Python deps into /install
-#   2. Final layer: python:3.12-slim + inject internal root CA + copy app
+#   1. Build layer: install Python deps, strip unused boto3 services
+#   2. Final layer: python:3.12-alpine + inject internal root CA + copy app
 #
 # Custom CA injection:
 #   Place *.crt or *.pem files in the ./certs/ directory before building.
@@ -13,21 +13,27 @@
 # ══════════════════════════════════════════════════════════════════════════════
 
 # ── Stage 1: dependency builder ───────────────────────────────────────────────
-FROM python:3.12-slim AS builder
+FROM python:3.12-alpine AS builder
 
 WORKDIR /build
 
-# Install build tools needed by some Python packages
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache gcc musl-dev
 
 COPY requirements.txt .
-RUN pip install --prefix=/install --no-cache-dir -r requirements.txt
+RUN pip install --prefix=/install --no-cache-dir --no-compile -r requirements.txt
+
+# Strip botocore service models we don't need (keep only S3)
+RUN find /install/lib/python*/site-packages/botocore/data/ \
+    -mindepth 1 -maxdepth 1 -type d \
+    ! -name s3 ! -name s3control \
+    -exec rm -rf {} + \
+    && find /install/lib/python*/site-packages -type d -name __pycache__ -exec rm -rf {} + \
+    && find /install/lib/python*/site-packages -name '*.pyc' -delete \
+    && find /install/lib/python*/site-packages -name '*.pyo' -delete
 
 
 # ── Stage 2: final runtime image ─────────────────────────────────────────────
-FROM python:3.12-slim AS final
+FROM python:3.12-alpine AS final
 
 LABEL maintainer="ontap-s3-browser"
 LABEL description="Self-hosted NetApp ONTAP S3 browser"
@@ -35,9 +41,7 @@ LABEL description="Self-hosted NetApp ONTAP S3 browser"
 WORKDIR /app
 
 # ── System packages for CA management ────────────────────────────────────────
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache ca-certificates
 
 # ── Inject internal root CA certificates (OPTIONAL) ──────────────────────────
 # To add custom CA certificates:
@@ -55,7 +59,7 @@ COPY app/       /app/app/
 COPY frontend/  /app/frontend/
 
 # ── Non-root user for security ────────────────────────────────────────────────
-RUN useradd -r -s /bin/false appuser
+RUN adduser -D -s /bin/false appuser
 USER appuser
 
 # ── Runtime ───────────────────────────────────────────────────────────────────
