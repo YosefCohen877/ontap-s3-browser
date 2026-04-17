@@ -359,7 +359,25 @@ body {
 .bucket-card__name { font-weight: 600; font-size: .9375rem; word-break: break-all; }
 .bucket-card__meta { display: flex; flex-direction: column; gap: .25rem; }
 .bucket-card__date { font-size: .75rem; color: var(--clr-text-muted); }
-.bucket-card__count { font-size: .75rem; color: var(--clr-text); opacity: .8; }
+.bucket-card__count { font-size: .75rem; color: var(--clr-text); opacity: .8; display: inline; }
+.bucket-card__count-wrap { display: flex; align-items: center; gap: .375rem; }
+.bucket-card__recount {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px; height: 18px;
+  border-radius: 4px;
+  color: var(--clr-text-muted);
+  opacity: 0;
+  transition: opacity .15s, color .15s, background .15s;
+}
+.bucket-card:hover .bucket-card__recount { opacity: 1; }
+.bucket-card__recount:hover { color: var(--clr-primary); background: var(--clr-surface-3); }
+.bucket-card__recount svg { width: 12px; height: 12px; }
+.bucket-card__recount--spinning svg { animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* Denied bucket cards */
 .bucket-card--denied {

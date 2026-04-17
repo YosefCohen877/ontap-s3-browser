@@ -4,6 +4,8 @@ routers/buckets.py — List S3 buckets.
 from __future__ import annotations
 
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.auth import enforce_bucket_access, require_auth
@@ -16,6 +18,11 @@ router = APIRouter(prefix="/api", tags=["buckets"])
 logger = get_logger(__name__)
 COUNT_CACHE_TTL_SECONDS = 120
 _bucket_count_cache: dict[str, tuple[int, float]] = {}
+
+# Bucket-list cache: avoids re-running list_buckets + head_bucket on every request
+_buckets_cache: dict | None = None
+_buckets_cache_ts: float = 0.0
+BUCKETS_CACHE_TTL_SECONDS = 30
 
 
 @router.post("/bucket")
@@ -64,6 +71,7 @@ def create_bucket(
             raise create_err
 
         _bucket_count_cache.pop(bucket, None)
+        _buckets_cache = None
         logger.info("bucket.create.success", bucket=bucket, user=username)
         return {"status": "ok", "bucket": bucket}
     except Exception as exc:
@@ -80,11 +88,10 @@ def create_bucket(
 @router.get("/buckets")
 def list_buckets(username: str = Depends(require_auth)):
     """Return all buckets accessible with the configured credentials."""
+    global _buckets_cache, _buckets_cache_ts
     try:
         cfg = get_settings()
 
-        # ── Forced single bucket mode ─────────────────────────────────────────
-        # If the endpoint URL included a path (e.g. /mybucket), we only show that.
         if cfg.s3_forced_bucket:
             logger.info("buckets.list.forced", bucket=cfg.s3_forced_bucket, user=username)
             return {
@@ -92,31 +99,61 @@ def list_buckets(username: str = Depends(require_auth)):
                 "forced": True
             }
 
+        # Return server-side cache if fresh
+        now = time.time()
+        if _buckets_cache and (now - _buckets_cache_ts) <= BUCKETS_CACHE_TTL_SECONDS:
+            logger.info("buckets.list.cache_hit", age=int(now - _buckets_cache_ts), user=username)
+            return _buckets_cache
+
         client = get_s3_client()
 
-        # Get buckets from S3 API if possible
-        buckets = []
         try:
             response = client.list_buckets()
-            for b in response.get("Buckets", []):
-                name = b["Name"]
-                accessible = True
-                try:
-                    client.head_bucket(Bucket=name)
-                except Exception:
-                    accessible = False
-                buckets.append({
-                    "name": name,
-                    "created": b.get("CreationDate").isoformat() if b.get("CreationDate") else None,
-                    "accessible": accessible,
-                })
         except Exception as api_exc:
             logger.warning("buckets.list_api_failed", error=str(api_exc))
             raise api_exc
 
+        raw_buckets = response.get("Buckets", [])
+
+        def _check_access(name: str) -> bool:
+            try:
+                client.head_bucket(Bucket=name)
+                return True
+            except Exception:
+                return False
+
+        # Parallel head_bucket — capped to connection pool size to avoid
+        # overwhelming ONTAP's TLS handshake capacity.
+        max_workers = min(len(raw_buckets), cfg.s3_max_pool_connections)
+        access_map: dict[str, bool] = {}
+
+        if max_workers > 0:
+            with ThreadPoolExecutor(max_workers=max_workers) as pool:
+                futures = {
+                    pool.submit(_check_access, b["Name"]): b["Name"]
+                    for b in raw_buckets
+                }
+                for future in as_completed(futures):
+                    name = futures[future]
+                    access_map[name] = future.result()
+
+        buckets = [
+            {
+                "name": b["Name"],
+                "created": b.get("CreationDate").isoformat() if b.get("CreationDate") else None,
+                "accessible": access_map.get(b["Name"], False),
+            }
+            for b in raw_buckets
+        ]
+
         accessible_count = sum(1 for b in buckets if b["accessible"])
         logger.info("buckets.list", count=len(buckets), accessible=accessible_count, user=username)
-        return {"buckets": buckets}
+
+        result = {"buckets": buckets}
+        _buckets_cache = result
+        _buckets_cache_ts = time.time()
+
+        return result
     except Exception as exc:
         info = classify_exception(exc)
         logger.error("buckets.list.error", category=info.category, detail=info.detail)

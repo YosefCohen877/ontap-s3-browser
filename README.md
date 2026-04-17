@@ -140,6 +140,32 @@ uvicorn app.main:app --reload --port 8080
 
 Open http://localhost:8080
 
+### Seeding Test Data
+
+A helper script is included to bulk-upload test files for development and testing.
+
+```bash
+# Set up a virtual environment (if you haven't already)
+python3 -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+
+# Upload 50 test files to the first accessible bucket
+python3 scripts/seed_test_data.py
+
+# Upload 200 files to a specific bucket and folder
+python3 scripts/seed_test_data.py --bucket my-bucket --prefix logs/2024/ --count 200
+
+# Larger files (10 KB each) with more parallelism
+python3 scripts/seed_test_data.py --count 100 --size 10 --workers 8
+
+# Clean up all test files when done
+python3 scripts/seed_test_data.py --cleanup
+python3 scripts/seed_test_data.py --bucket my-bucket --prefix logs/2024/ --cleanup
+```
+
+The script generates a mix of file types (JSON, CSV, Markdown, XML, binary) and places them under a `__test-seed__/` prefix for easy cleanup. It reads credentials from your `.env` file automatically.
+
 ---
 
 ## Configuration
@@ -234,6 +260,8 @@ ontap-s3-browser/
 ├── certs/                   ← Drop custom CA .crt files here
 │   ├── .gitignore           ← Ignore cert files
 │   └── README.md            ← Certificate setup instructions
+├── scripts/
+│   └── seed_test_data.py    ← Bulk-upload test files for development
 ├── Dockerfile               ← Multi-stage container build
 ├── docker-compose.yml       ← Pull pre-built image (recommended)
 ├── docker-compose.build.yml ← Build from source (developers)
