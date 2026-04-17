@@ -4,6 +4,8 @@ routers/objects.py — List, inspect, and download S3 objects.
 from __future__ import annotations
 
 import mimetypes
+import os
+import re
 import urllib.parse
 from typing import Optional
 
@@ -232,17 +234,22 @@ def upload_object(
     if not cfg.enable_upload:
         raise HTTPException(status_code=403, detail="Upload functionality is disabled")
 
-    # prefix is like "some/folder/" or "". Ensure key builds correctly.
-    key = file.filename
+    # Sanitize filename: strip path components and control characters
+    safe_name = os.path.basename(file.filename or "upload")
+    safe_name = re.sub(r'[\x00-\x1f]', '', safe_name).strip('. ')
+    if not safe_name:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    key = safe_name
     if prefix:
         if not prefix.endswith("/"):
             prefix += "/"
-        key = prefix + file.filename
+        key = prefix + safe_name
 
     try:
         enforce_bucket_access(bucket)
         client = get_s3_client()
-        content_type = file.content_type or mimetypes.guess_type(file.filename)[0] or "application/octet-stream"
+        content_type = file.content_type or mimetypes.guess_type(safe_name)[0] or "application/octet-stream"
 
         extra_args = {"ContentType": content_type}
         logger.info("objects.upload.start", bucket=bucket, key=key, user=username, content_type=content_type)

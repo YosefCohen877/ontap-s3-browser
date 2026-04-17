@@ -48,6 +48,7 @@ def create_bucket(
         })
 
     try:
+        global _buckets_cache
         client = get_s3_client()
         created = False
         create_err = None

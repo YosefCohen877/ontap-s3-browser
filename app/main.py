@@ -63,15 +63,16 @@ if FRONTEND_DIR.is_dir():
 
     _index_html = FRONTEND_DIR / "index.html"
 
+    _frontend_resolved = FRONTEND_DIR.resolve()
+
     @app.get("/{full_path:path}")
     async def spa_fallback(full_path: str):
         """
         SPA catch-all: any path that isn't an /api route or a real static file
         gets index.html so client-side routing works on browser refresh.
         """
-        # Check if the requested path maps to a real file in the frontend dir
-        candidate = FRONTEND_DIR / full_path
-        if candidate.is_file():
+        candidate = (FRONTEND_DIR / full_path).resolve()
+        if candidate.is_relative_to(_frontend_resolved) and candidate.is_file():
             return FileResponse(candidate)
         return FileResponse(_index_html)
 

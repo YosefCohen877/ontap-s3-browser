@@ -8,6 +8,7 @@ window.BrowserView = (() => {
   const objectList   = document.getElementById('objectList');
   const breadcrumb   = document.getElementById('breadcrumb');
   const detailContent = document.getElementById('detailContent');
+  const detailPane   = document.getElementById('detailPane');
   const searchInput  = document.getElementById('searchInput');
   const objectCountLabel = document.getElementById('objectCountLabel');
   const sortSelect   = document.getElementById('sortSelect');
@@ -159,10 +160,21 @@ window.BrowserView = (() => {
   }
 
   // ── Detail pane ──────────────────────────────────────────────────────────
+  function _closeMobileDetail() {
+    detailPane?.classList.remove('mobile-open');
+  }
+
   async function _showDetail(bucket, key, name) {
+    detailPane?.classList.add('mobile-open');
+
     detailContent.innerHTML = `
       <div class="detail-header">
-        <div class="detail-header__name">${_esc(name)}</div>
+        <div class="detail-header__top">
+          <div class="detail-header__name">${_esc(name)}</div>
+          <button class="detail-header__close" id="detailCloseBtn" aria-label="Close details">
+            <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+          </button>
+        </div>
         <div class="detail-header__actions">
           <a class="btn btn--primary btn--sm"
              href="${API.downloadUrl(bucket, key)}"
@@ -184,6 +196,8 @@ window.BrowserView = (() => {
         </div>
       </div>
       <div class="detail-preview" id="detailPreview"></div>`;
+
+    document.getElementById('detailCloseBtn')?.addEventListener('click', _closeMobileDetail);
 
     const deleteBtn = document.getElementById('deleteObjectBtn');
     if (deleteBtn) {
@@ -336,14 +350,10 @@ window.BrowserView = (() => {
   refreshBrowser?.addEventListener('click', () => load(_bucket, _prefix, true));
 
   // ── Upload wiring ────────────────────────────────────────────────────────
-  uploadBtn?.addEventListener('click', () => uploadInput?.click());
-
-  uploadInput?.addEventListener('change', async (e) => {
-    const files = e.target.files;
-    if (!files || !files.length) return;
-
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
+  async function _uploadFiles(fileList) {
+    if (!fileList || !fileList.length) return;
+    for (let i = 0; i < fileList.length; i++) {
+      const file = fileList[i];
       Toast.info(`Uploading ${file.name}...`);
       try {
         await API.uploadObject(_bucket, _prefix, file);
@@ -352,9 +362,50 @@ window.BrowserView = (() => {
         Toast.error(`Failed to upload ${file.name}: ${err.message || 'Unknown error'}`);
       }
     }
-    uploadInput.value = ''; // reset
-    Nav.toBrowser(_bucket, _prefix, false); // Refresh list without pushing history
+    Nav.toBrowser(_bucket, _prefix, false);
+  }
+
+  uploadBtn?.addEventListener('click', () => uploadInput?.click());
+
+  uploadInput?.addEventListener('change', async (e) => {
+    await _uploadFiles(e.target.files);
+    uploadInput.value = '';
   });
+
+  // ── Drag-and-drop upload ────────────────────────────────────────────────
+  if (objectList) {
+    let _dragCounter = 0;
+
+    objectList.addEventListener('dragenter', (e) => {
+      if (!window.ServerFeatures?.upload) return;
+      e.preventDefault();
+      _dragCounter++;
+      objectList.classList.add('drop-active');
+    });
+
+    objectList.addEventListener('dragleave', () => {
+      if (!window.ServerFeatures?.upload) return;
+      _dragCounter--;
+      if (_dragCounter <= 0) {
+        _dragCounter = 0;
+        objectList.classList.remove('drop-active');
+      }
+    });
+
+    objectList.addEventListener('dragover', (e) => {
+      if (!window.ServerFeatures?.upload) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    });
+
+    objectList.addEventListener('drop', async (e) => {
+      if (!window.ServerFeatures?.upload) return;
+      e.preventDefault();
+      _dragCounter = 0;
+      objectList.classList.remove('drop-active');
+      await _uploadFiles(e.dataTransfer.files);
+    });
+  }
 
   if (sortSelect) sortSelect.value = _sort;
   if (pageSizeSelect) pageSizeSelect.value = String(_pageSize);

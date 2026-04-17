@@ -4,6 +4,21 @@
  */
 
 window.PreviewView = (() => {
+  let _activeBlobUrl = null;
+
+  function _revokeBlobUrl() {
+    if (_activeBlobUrl) {
+      URL.revokeObjectURL(_activeBlobUrl);
+      _activeBlobUrl = null;
+    }
+  }
+
+  function _createBlobUrl(blob) {
+    _revokeBlobUrl();
+    _activeBlobUrl = URL.createObjectURL(blob);
+    return _activeBlobUrl;
+  }
+
   function _esc(str) {
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
@@ -17,6 +32,8 @@ window.PreviewView = (() => {
   }
 
   async function loadPreview(bucket, key, container) {
+    _revokeBlobUrl();
+
     container.innerHTML = `<div style="padding:1.25rem;display:flex;align-items:center;gap:.5rem;font-size:.8125rem;color:var(--clr-text-muted)">
       <div class="spinner" style="width:18px;height:18px;border-width:2px;flex-shrink:0"></div> Loading preview…
     </div>`;
@@ -57,8 +74,7 @@ window.PreviewView = (() => {
     if (data instanceof Response) {
       const ct = data.headers.get('content-type') || '';
       if (ct.startsWith('image/')) {
-        const blob = await data.blob();
-        const url  = URL.createObjectURL(blob);
+        const url = _createBlobUrl(await data.blob());
         container.innerHTML = `
           <div class="preview-label">Image Preview</div>
           <img class="preview-image" src="${url}" alt="Preview" />
@@ -66,8 +82,7 @@ window.PreviewView = (() => {
         return;
       }
       if (ct.startsWith('video/')) {
-        const blob = await data.blob();
-        const url  = URL.createObjectURL(blob);
+        const url = _createBlobUrl(await data.blob());
         container.innerHTML = `
           <div class="preview-label">Video Preview</div>
           <video class="preview-video" src="${url}" controls playsinline
@@ -76,8 +91,7 @@ window.PreviewView = (() => {
         return;
       }
       if (ct === 'application/pdf') {
-        const blob = await data.blob();
-        const url  = URL.createObjectURL(blob);
+        const url = _createBlobUrl(await data.blob());
         container.innerHTML = `
           <div class="preview-label">PDF Preview</div>
           <embed class="preview-pdf" src="${url}" type="application/pdf" />
