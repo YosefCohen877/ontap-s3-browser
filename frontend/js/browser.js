@@ -1,6 +1,7 @@
 /**
  * browser.js — Object/prefix browser view.
- * Handles: breadcrumb nav, sort, search, object list rendering, detail pane.
+ * Handles: breadcrumb nav, sort, search, object list rendering, detail pane,
+ *          multi-select with bulk delete/download.
  */
 
 window.BrowserView = (() => {
@@ -21,6 +22,11 @@ window.BrowserView = (() => {
   const uploadWrap   = document.getElementById('uploadWrap');
   const uploadInput  = document.getElementById('uploadInput');
   const uploadBtn    = document.getElementById('uploadBtn');
+  const bulkActions  = document.getElementById('bulkActions');
+  const selectAllCb  = document.getElementById('selectAllCheckbox');
+  const bulkSelLabel = document.getElementById('bulkSelectionLabel');
+  const bulkDownloadBtn = document.getElementById('bulkDownloadBtn');
+  const bulkDeleteBtn   = document.getElementById('bulkDeleteBtn');
 
   let _bucket  = '';
   let _prefix  = '';
@@ -32,6 +38,8 @@ window.BrowserView = (() => {
   let _nextToken = null;
   let _tokenHistory = [];
   let _pageNumber = 1;
+  const _selectedKeys = new Set();
+  let _currentFileKeys = [];
   const FILE_COUNT_CACHE_KEY = 's3b-file-count-cache';
   function _setPagerControls() {
     if (prevPageBtn) prevPageBtn.disabled = _tokenHistory.length === 0;
@@ -39,6 +47,38 @@ window.BrowserView = (() => {
     if (pageLabel) pageLabel.textContent = `Page ${_pageNumber}`;
   }
 
+
+  // ── Selection helpers ────────────────────────────────────────────────────
+  function _clearSelection() {
+    _selectedKeys.clear();
+    _syncSelectionUI();
+  }
+
+  function _syncSelectionUI() {
+    const count = _selectedKeys.size;
+    const fileCount = _currentFileKeys.length;
+
+    if (bulkActions) bulkActions.hidden = count === 0;
+    if (bulkDeleteBtn) bulkDeleteBtn.hidden = !window.ServerFeatures?.delete;
+
+    if (bulkSelLabel) {
+      bulkSelLabel.textContent = count === 0
+        ? 'None selected'
+        : `${count} file${count === 1 ? '' : 's'} selected`;
+    }
+
+    if (selectAllCb) {
+      selectAllCb.checked = fileCount > 0 && count === fileCount;
+      selectAllCb.indeterminate = count > 0 && count < fileCount;
+    }
+
+    objectList.querySelectorAll('.object-row[data-type="object"]').forEach(row => {
+      const cb = row.querySelector('.object-row__check input');
+      const isSelected = _selectedKeys.has(row.dataset.key);
+      if (cb) cb.checked = isSelected;
+      row.classList.toggle('multi-selected', isSelected);
+    });
+  }
 
   // ── Icons ────────────────────────────────────────────────────────────────
   const ICON_FOLDER = `<svg viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>`;
@@ -106,6 +146,7 @@ window.BrowserView = (() => {
   function _renderSkeleton() {
     objectList.innerHTML = Array(8).fill(0).map(() => `
       <div class="object-row" style="pointer-events:none">
+        <div style="width:16px;height:16px;border-radius:3px;background:var(--clr-surface-3);animation:pulse 1.5s infinite"></div>
         <div style="width:20px;height:20px;border-radius:4px;background:var(--clr-surface-3);animation:pulse 1.5s infinite"></div>
         <div style="height:13px;width:60%;border-radius:4px;background:var(--clr-surface-3);animation:pulse 1.5s infinite"></div>
         <div style="height:11px;width:50px;border-radius:4px;background:var(--clr-surface-3);animation:pulse 1.5s infinite"></div>
@@ -116,33 +157,66 @@ window.BrowserView = (() => {
 
   // ── Object list ──────────────────────────────────────────────────────────
   function _renderItems(items) {
+    _currentFileKeys = items.filter(i => i.type === 'object').map(i => i.key);
+    _selectedKeys.clear();
+
     if (!items.length) {
       const msg = _search ? 'No objects match your search.' : 'This folder is empty.';
       objectList.innerHTML = `<div class="state-card">
         <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd"/></svg>
         ${msg}
       </div>`;
+      _syncSelectionUI();
       return;
     }
 
-    objectList.innerHTML = items.map(item => `
-      <div class="object-row" role="listitem" tabindex="0"
+    objectList.innerHTML = items.map(item => {
+      const isFile = item.type === 'object';
+      const checkboxHtml = isFile
+        ? `<label class="object-row__check" aria-label="Select ${_esc(item.name)}">
+             <input type="checkbox" tabindex="-1">
+           </label>`
+        : `<span class="object-row__check-placeholder"></span>`;
+
+      return `
+      <div class="object-row ${isFile ? 'object-row--selectable' : ''}" role="listitem" tabindex="0"
            data-type="${item.type}" data-key="${_esc(item.key)}" data-name="${_esc(item.name)}"
-           aria-label="${item.type === 'prefix' ? 'Folder' : 'File'}: ${_esc(item.name)}">
+           aria-label="${isFile ? 'File' : 'Folder'}: ${_esc(item.name)}">
+        ${checkboxHtml}
         <span class="object-row__icon ${item.type === 'prefix' ? 'folder' : 'file'}" aria-hidden="true">
           ${item.type === 'prefix' ? ICON_FOLDER : ICON_FILE}
         </span>
         <span class="object-row__name" title="${_esc(item.key)}">${_esc(item.name)}</span>
         <span class="object-row__size">${item.size !== null ? formatBytes(item.size) : ''}</span>
         <span class="object-row__date">${item.modified ? formatDate(item.modified) : ''}</span>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
 
     objectList.querySelectorAll('.object-row').forEach(row => {
-      const open = () => _handleRowClick(row);
+      const cb = row.querySelector('.object-row__check input');
+
+      if (cb) {
+        cb.addEventListener('click', (e) => e.stopPropagation());
+        cb.addEventListener('change', () => {
+          if (cb.checked) {
+            _selectedKeys.add(row.dataset.key);
+          } else {
+            _selectedKeys.delete(row.dataset.key);
+          }
+          row.classList.toggle('multi-selected', cb.checked);
+          _syncSelectionUI();
+        });
+      }
+
+      const open = (e) => {
+        if (e.target.closest('.object-row__check')) return;
+        _handleRowClick(row);
+      };
       row.addEventListener('click', open);
-      row.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') open(); });
+      row.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') open(e); });
     });
+
+    _syncSelectionUI();
   }
 
   function _handleRowClick(row) {
@@ -406,6 +480,54 @@ window.BrowserView = (() => {
       await _uploadFiles(e.dataTransfer.files);
     });
   }
+
+  // ── Bulk-action wiring ─────────────────────────────────────────────────
+  selectAllCb?.addEventListener('change', () => {
+    if (selectAllCb.checked) {
+      _currentFileKeys.forEach(k => _selectedKeys.add(k));
+    } else {
+      _selectedKeys.clear();
+    }
+    _syncSelectionUI();
+  });
+
+  bulkDownloadBtn?.addEventListener('click', () => {
+    if (!_selectedKeys.size) return;
+    const keys = [..._selectedKeys];
+    let idx = 0;
+    function _downloadNext() {
+      if (idx >= keys.length) return;
+      const key = keys[idx++];
+      const a = document.createElement('a');
+      a.href = API.downloadUrl(_bucket, key);
+      a.download = key.split('/').pop() || 'download';
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(_downloadNext, 500);
+    }
+    Toast.info(`Downloading ${keys.length} file${keys.length === 1 ? '' : 's'}…`);
+    _downloadNext();
+  });
+
+  bulkDeleteBtn?.addEventListener('click', async () => {
+    if (!_selectedKeys.size) return;
+    const count = _selectedKeys.size;
+    if (!confirm(`Are you sure you want to delete ${count} file${count === 1 ? '' : 's'}?`)) return;
+    try {
+      const result = await API.deleteObjectsBulk(_bucket, [..._selectedKeys]);
+      if (result.errors?.length) {
+        Toast.error(`Deleted ${result.deleted}, but ${result.errors.length} failed`);
+      } else {
+        Toast.success(`Deleted ${result.deleted} file${result.deleted === 1 ? '' : 's'}`);
+      }
+      _clearSelection();
+      load(_bucket, _prefix, false);
+    } catch (err) {
+      Toast.error(`Bulk delete failed: ${err.message || 'Unknown error'}`);
+    }
+  });
 
   if (sortSelect) sortSelect.value = _sort;
   if (pageSizeSelect) pageSizeSelect.value = String(_pageSize);

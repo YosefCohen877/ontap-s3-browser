@@ -552,7 +552,7 @@ body {
 
 .object-row {
   display: grid;
-  grid-template-columns: 28px 1fr auto auto;
+  grid-template-columns: 24px 28px 1fr auto auto;
   align-items: center;
   gap: .75rem;
   padding: .65rem 1rem;
@@ -564,7 +564,31 @@ body {
 .object-row:last-child { border-bottom: none; }
 .object-row:hover { background: var(--clr-surface-2); }
 .object-row.selected { background: color-mix(in srgb, var(--clr-primary) 12%, transparent); }
+.object-row.multi-selected { background: color-mix(in srgb, var(--clr-primary) 10%, transparent); }
+.object-row.multi-selected:hover { background: color-mix(in srgb, var(--clr-primary) 16%, transparent); }
 .object-row:focus { outline: none; background: var(--clr-surface-2); }
+
+/* Checkbox column */
+.object-row__check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.object-row__check input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--clr-primary);
+  cursor: pointer;
+  margin: 0;
+}
+.object-row__check-placeholder {
+  width: 16px;
+  height: 16px;
+}
+.object-row--selectable .object-row__check { opacity: .5; transition: opacity .12s; }
+.object-row--selectable:hover .object-row__check,
+.object-row--selectable.multi-selected .object-row__check { opacity: 1; }
 
 .object-row__icon svg { width: 20px; height: 20px; }
 .object-row__icon.folder { color: var(--clr-warning); }
@@ -579,6 +603,41 @@ body {
 }
 .object-row__size  { font-size: .75rem; color: var(--clr-text-muted); white-space: nowrap; }
 .object-row__date  { font-size: .75rem; color: var(--clr-text-muted); white-space: nowrap; }
+
+/* ── Bulk action bar ───────────────────────────────────── */
+.bulk-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  padding: .5rem 1rem;
+  background: var(--clr-surface);
+  border: 1px solid var(--clr-primary);
+  border-radius: 10px;
+  box-shadow: var(--glow-primary);
+  animation: fadeIn .15s ease;
+}
+.bulk-actions__select-all {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  font-size: .8125rem;
+  font-weight: 500;
+  color: var(--clr-text);
+  cursor: pointer;
+  user-select: none;
+}
+.bulk-actions__select-all input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--clr-primary);
+  cursor: pointer;
+  margin: 0;
+}
+.bulk-actions__buttons {
+  display: flex;
+  gap: .5rem;
+}
 
 /* ══ 9. Detail Pane ═════════════════════════════════════ */
 .browser-detail-pane {

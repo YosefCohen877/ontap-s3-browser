@@ -7,7 +7,7 @@ import mimetypes
 import os
 import re
 import urllib.parse
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, File, Form, UploadFile
 from fastapi.responses import StreamingResponse
@@ -295,6 +295,76 @@ def delete_object(
     except Exception as exc:
         info = classify_exception(exc)
         logger.error("objects.delete.error", category=info.category, detail=info.detail)
+        raise HTTPException(status_code=info.http_code, detail={
+            "category": info.category,
+            "title": info.title,
+            "message": info.message,
+            "detail": info.detail,
+        })
+
+
+from pydantic import BaseModel
+
+
+class BulkDeleteRequest(BaseModel):
+    bucket: str
+    keys: List[str]
+
+
+@router.post("/objects/delete-bulk")
+def delete_objects_bulk(
+    body: BulkDeleteRequest,
+    username: str = Depends(require_auth),
+):
+    """Delete multiple objects from S3 in a single request."""
+    cfg = get_settings()
+    if not cfg.enable_delete:
+        raise HTTPException(status_code=403, detail="Delete functionality is disabled")
+
+    if not body.keys:
+        raise HTTPException(status_code=400, detail="No keys provided")
+
+    if len(body.keys) > 1000:
+        raise HTTPException(status_code=400, detail="Cannot delete more than 1000 objects at once")
+
+    try:
+        enforce_bucket_access(body.bucket)
+        client = get_s3_client()
+        logger.info(
+            "objects.delete_bulk.start",
+            bucket=body.bucket,
+            count=len(body.keys),
+            user=username,
+        )
+
+        delete_objects = [{"Key": k} for k in body.keys]
+        resp = client.delete_objects(
+            Bucket=body.bucket,
+            Delete={"Objects": delete_objects, "Quiet": True},
+        )
+
+        errors = resp.get("Errors", [])
+        deleted_count = len(body.keys) - len(errors)
+
+        logger.info(
+            "objects.delete_bulk.done",
+            bucket=body.bucket,
+            deleted=deleted_count,
+            errors=len(errors),
+            user=username,
+        )
+        return {
+            "status": "ok",
+            "bucket": body.bucket,
+            "deleted": deleted_count,
+            "errors": [
+                {"key": e.get("Key"), "code": e.get("Code"), "message": e.get("Message")}
+                for e in errors
+            ],
+        }
+    except Exception as exc:
+        info = classify_exception(exc)
+        logger.error("objects.delete_bulk.error", category=info.category, detail=info.detail)
         raise HTTPException(status_code=info.http_code, detail={
             "category": info.category,
             "title": info.title,

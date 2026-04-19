@@ -73,5 +73,11 @@ window.API = (() => {
       _fetch(`/api/object?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`, {
         method: 'DELETE',
       }),
+    deleteObjectsBulk: (bucket, keys) =>
+      _fetch('/api/objects/delete-bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bucket, keys }),
+      }),
   };
 })();
