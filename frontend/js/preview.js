@@ -85,8 +85,7 @@ window.PreviewView = (() => {
         const url = _createBlobUrl(await data.blob());
         container.innerHTML = `
           <div class="preview-label">Video Preview</div>
-          <video class="preview-video" src="${url}" controls playsinline
-                 style="max-width:100%;max-height:400px;display:block;margin:.75rem auto"></video>
+          <video class="preview-video" src="${url}" controls playsinline></video>
         `;
         return;
       }

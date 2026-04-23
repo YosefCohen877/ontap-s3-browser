@@ -20,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette import status
 
 from app.config import get_settings
-from app.routers import buckets, diagnostics, objects, preview
+from app.routers import buckets, diagnostics, lifecycle, objects, preview
 from app.utils.logging import configure_logging, get_logger
 
 # ── Bootstrap logging first so all import-time log calls work ─────────────
@@ -43,7 +43,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],   # Override if exposing publicly; reverse proxy is preferred
     allow_credentials=True,
-    allow_methods=["GET"],
+    allow_methods=["GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -52,6 +52,7 @@ app.include_router(diagnostics.router)
 app.include_router(buckets.router)
 app.include_router(objects.router)
 app.include_router(preview.router)
+app.include_router(lifecycle.router)
 
 # ── Serve frontend static files ───────────────────────────────────────────
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend"

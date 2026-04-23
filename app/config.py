@@ -50,7 +50,9 @@ class Settings(BaseSettings):
     enable_upload: bool = False
     enable_delete: bool = False
     enable_create_bucket: bool = False
+    enable_delete_bucket: bool = False
     enable_bucket_count: bool = True
+    enable_bucket_lifecycle: bool = False
 
     @model_validator(mode="before")
     @classmethod
