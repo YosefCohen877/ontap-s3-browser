@@ -164,6 +164,10 @@
                 <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
                 Download
               </button>
+              <button class="btn btn--ghost btn--sm" id="bulkTagBtn" title="Add tags to selected files" hidden>
+                <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828zM4 16a1 1 0 001 1h2l8-8-3-3-8 8v2z" clip-rule="evenodd"/></svg>
+                Add tags
+              </button>
               <button class="btn btn--danger btn--sm" id="bulkDeleteBtn" title="Delete selected files">
                 <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
                 Delete
@@ -325,6 +329,37 @@
         <div class="lc-modal__footer-actions">
           <button class="btn btn--ghost" type="button" data-db-close>Cancel</button>
           <button class="btn btn--danger" type="submit" form="deleteBucketForm" id="deleteBucketSubmitBtn" disabled>Delete bucket</button>
+        </div>
+      </footer>
+    </div>
+  </div>
+
+  <!-- ── Object tags (single replace / bulk merge) ───── -->
+  <div class="lc-modal" id="objectTagsModal" role="dialog" aria-modal="true" aria-labelledby="objectTagsTitle" hidden>
+    <div class="lc-modal__backdrop" data-ot-close></div>
+    <div class="lc-modal__panel lc-modal__panel--narrow">
+      <header class="lc-modal__header">
+        <div>
+          <h2 class="lc-modal__title" id="objectTagsTitle">Object tags</h2>
+          <p class="lc-modal__subtitle" id="objectTagsSubtitle">—</p>
+        </div>
+        <button class="icon-btn" type="button" data-ot-close aria-label="Close">
+          <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+          </svg>
+        </button>
+      </header>
+      <div class="lc-modal__body">
+        <p id="objectTagsHint" class="lc-edit-intro lc-edit-intro--compact">—</p>
+        <p id="objectTagsError" class="lc-inline-error" role="alert" hidden></p>
+        <div id="objectTagRows" class="object-tag-rows"></div>
+        <button type="button" class="btn btn--ghost btn--sm" id="objectTagAddRowBtn">Add tag row</button>
+      </div>
+      <footer class="lc-modal__footer lc-modal__footer--split">
+        <p class="lc-footer-hint" id="objectTagsFooterHint">S3 allows at most 10 tags per object. Keys 1–128 chars; values up to 256.</p>
+        <div class="lc-modal__footer-actions">
+          <button class="btn btn--ghost" type="button" data-ot-close>Cancel</button>
+          <button class="btn btn--primary" type="button" id="objectTagsSaveBtn">Save</button>
         </div>
       </footer>
     </div>

@@ -23,6 +23,18 @@ window.PreviewView = (() => {
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
+  /** Human label for preview_text_limit_bytes from API */
+  function _fmtPreviewLimit(bytes) {
+    const n = Number(bytes);
+    if (!Number.isFinite(n) || n <= 0) return '512 KB';
+    if (n >= 1048576) {
+      const mb = n / 1048576;
+      return (mb >= 10 ? `${Math.round(mb)} MB` : `${mb.toFixed(1).replace(/\.0$/, '')} MB`);
+    }
+    if (n >= 1024) return `${Math.round(n / 1024)} KB`;
+    return `${n} B`;
+  }
+
   function _isJson(text) {
     try { JSON.parse(text); return true; } catch { return false; }
   }
@@ -61,11 +73,12 @@ window.PreviewView = (() => {
       const isJson = _isJson(data.content);
       const displayText = isJson ? _prettyJson(data.content) : data.content;
       const label = isJson ? 'JSON Preview' : 'Text Preview';
+      const lim = _fmtPreviewLimit(data.preview_text_limit_bytes);
 
       container.innerHTML = `
-        <div class="preview-label">${label}${data.truncated ? ' <span style="color:var(--clr-warning)">(truncated at 512 KB)</span>' : ''}</div>
+        <div class="preview-label">${label}${data.truncated ? ` <span style="color:var(--clr-warning)">(truncated at ${lim})</span>` : ''}</div>
         <pre class="preview-text" dir="auto">${_esc(displayText)}</pre>
-        ${data.truncated ? '<div class="preview-truncated">⚠ File is larger than 512 KB — showing first 512 KB only. Download for full content.</div>' : ''}
+        ${data.truncated ? `<div class="preview-truncated">⚠ File is larger than ${lim} — showing first ${lim} only. Download for full content.</div>` : ''}
       `;
       return;
     }

@@ -8,7 +8,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Optional
 
-from pydantic import field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -42,6 +42,12 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
 
+    # ── Object preview limits (bytes) ───────────────────────────────────────
+    # Text/JSON/log previews read at most this many bytes (memory-safe).
+    preview_max_text_bytes: int = Field(default=512 * 1024, ge=1024, le=100 * 1024 * 1024)
+    # Images, PDFs, and video stream previews refuse objects larger than this.
+    preview_max_binary_bytes: int = Field(default=20 * 1024 * 1024, ge=64 * 1024, le=2 * 1024**3)
+
     # ── Web UI authentication ────────────────────────────────────────────────
     web_username: str = "admin"
     web_password: str  # required — no default, must be set in env
@@ -53,6 +59,8 @@ class Settings(BaseSettings):
     enable_delete_bucket: bool = False
     enable_bucket_count: bool = True
     enable_bucket_lifecycle: bool = False
+    # Replace/merge S3 object tags (PutObjectTagging / GetObjectTagging)
+    enable_object_tagging: bool = True
 
     @model_validator(mode="before")
     @classmethod

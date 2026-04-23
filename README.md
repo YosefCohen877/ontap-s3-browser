@@ -131,7 +131,7 @@ open http://localhost:8080
 Quick local development setup:
 
 ```bash
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env
@@ -195,6 +195,7 @@ All settings are in `.env`. Key variables:
 | `ENABLE_DELETE_BUCKET` | — | `false` (allow empty-bucket deletion from the UI) |
 | `ENABLE_BUCKET_COUNT` | — | `true` (show file count per bucket; disable for large buckets) |
 | `ENABLE_BUCKET_LIFECYCLE` | — | `false` (allow add/edit/delete of expiration rules; requires ONTAP 9.13.1+) |
+| `ENABLE_OBJECT_TAGGING` | — | `true` (allow viewing/editing S3 object tags in the UI; set `false` to hide tag actions) |
 
 See `.env.example` for all options with documentation.
 
