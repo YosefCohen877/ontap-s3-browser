@@ -1418,6 +1418,35 @@ body.lc-modal-open { overflow: hidden; }
   max-width: 26rem;
 }
 
+body.object-tag-modal-open {
+  overflow: hidden;
+}
+
+.object-tag-rows {
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+  margin-bottom: .75rem;
+}
+
+.object-tag-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: .5rem;
+  align-items: center;
+}
+
+.object-tag-row__key,
+.object-tag-row__value {
+  min-width: 0;
+}
+
+@media (max-width: 520px) {
+  .object-tag-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .lc-edit-intro {
   font-size: .875rem;
   color: var(--clr-text-muted);

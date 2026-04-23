@@ -1,6 +1,6 @@
 """
 routers/preview.py — Return a size-limited preview of text/JSON/log objects.
-Large binaries and images return metadata only; the frontend handles display.
+Limits come from Settings (PREVIEW_MAX_TEXT_BYTES, PREVIEW_MAX_BINARY_BYTES).
 """
 from __future__ import annotations
 
@@ -8,17 +8,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse, Response
 
 from app.auth import require_auth, enforce_bucket_access
+from app.config import get_settings
 from app.s3_client import get_s3_client
 from app.utils.errors import classify_exception
 from app.utils.logging import get_logger
 
 router = APIRouter(prefix="/api", tags=["preview"])
 logger = get_logger(__name__)
-
-# Maximum bytes to load for text preview to avoid memory issues
-TEXT_PREVIEW_LIMIT = 512 * 1024  # 512 KB
-# Max size to inline-stream for images and PDFs
-BINARY_PREVIEW_LIMIT = 20 * 1024 * 1024  # 20 MB
 
 # File types we can render in the browser
 TEXT_TYPES = {
@@ -34,6 +30,12 @@ IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+
 VIDEO_TYPES = {"video/mp4", "video/webm", "video/ogg"}
 VIDEO_EXTENSIONS = {".mp4", ".webm", ".ogv", ".ogg"}
 PDF_TYPE = "application/pdf"
+
+
+def _too_large_message(kind: str, size: int, limit: int) -> str:
+    sz_mb = size / (1024 * 1024)
+    lim_mb = limit / (1024 * 1024)
+    return f"{kind} is {sz_mb:.1f} MB; max preview size is {lim_mb:.1f} MB — download instead."
 
 
 def _is_text(content_type: str, key: str) -> bool:
@@ -71,11 +73,15 @@ def preview_object(
 ):
     """
     Return an object for in-browser preview.
-    - Text/JSON/log: return raw bytes (limited to TEXT_PREVIEW_LIMIT)
-    - Image/PDF: stream inline up to BINARY_PREVIEW_LIMIT
+    - Text/JSON/log: return raw bytes (limited to preview_max_text_bytes)
+    - Image/PDF/video: stream inline up to preview_max_binary_bytes
     - Other: return 415 Unsupported Media Type
     """
     try:
+        cfg = get_settings()
+        text_limit = cfg.preview_max_text_bytes
+        binary_limit = cfg.preview_max_binary_bytes
+
         enforce_bucket_access(bucket)
         client = get_s3_client()
         head = client.head_object(Bucket=bucket, Key=key)
@@ -93,7 +99,7 @@ def preview_object(
 
         # ── Text preview ──────────────────────────────────────────────────
         if _is_text(content_type, key):
-            read_bytes = min(size, TEXT_PREVIEW_LIMIT)
+            read_bytes = min(size, text_limit)
             range_header = f"bytes=0-{read_bytes - 1}" if read_bytes > 0 else None
 
             get_kwargs = {"Bucket": bucket, "Key": key}
@@ -102,7 +108,7 @@ def preview_object(
 
             resp = client.get_object(**get_kwargs)
             data = resp["Body"].read()
-            truncated = size > TEXT_PREVIEW_LIMIT
+            truncated = size > text_limit
 
             # Try to decode; fall back gracefully
             try:
@@ -114,17 +120,18 @@ def preview_object(
                 "preview_type": "text",
                 "content": text,
                 "truncated": truncated,
+                "preview_text_limit_bytes": text_limit,
                 "size": size,
                 "content_type": content_type,
             }
 
         # ── Image inline stream ───────────────────────────────────────────
         if _is_image(content_type):
-            if size > BINARY_PREVIEW_LIMIT:
+            if size > binary_limit:
                 raise HTTPException(status_code=413, detail={
                     "category": "preview_too_large",
                     "title": "File Too Large for Preview",
-                    "message": f"Image is {size // (1024*1024)} MB — download it instead.",
+                    "message": _too_large_message("Image", size, binary_limit),
                     "detail": None,
                 })
             resp = client.get_object(Bucket=bucket, Key=key)
@@ -142,11 +149,11 @@ def preview_object(
 
         # ── PDF inline stream ─────────────────────────────────────────────
         if _is_pdf(content_type):
-            if size > BINARY_PREVIEW_LIMIT:
+            if size > binary_limit:
                 raise HTTPException(status_code=413, detail={
                     "category": "preview_too_large",
                     "title": "File Too Large for Preview",
-                    "message": f"PDF is {size // (1024*1024)} MB — download it instead.",
+                    "message": _too_large_message("PDF", size, binary_limit),
                     "detail": None,
                 })
             resp = client.get_object(Bucket=bucket, Key=key)
@@ -164,11 +171,11 @@ def preview_object(
 
         # ── Video inline stream ────────────────────────────────────────────
         if _is_video(content_type, key):
-            if size > BINARY_PREVIEW_LIMIT:
+            if size > binary_limit:
                 raise HTTPException(status_code=413, detail={
                     "category": "preview_too_large",
                     "title": "File Too Large for Preview",
-                    "message": f"Video is {size // (1024*1024)} MB — download it instead.",
+                    "message": _too_large_message("Video", size, binary_limit),
                     "detail": None,
                 })
             resp = client.get_object(Bucket=bucket, Key=key)

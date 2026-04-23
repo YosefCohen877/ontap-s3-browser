@@ -2,11 +2,11 @@
 seed_test_data.py — Bulk-upload test files to an S3 bucket for testing.
 
 Usage:
-    python scripts/seed_test_data.py                          # 50 files to first accessible bucket
-    python scripts/seed_test_data.py --bucket my-bucket       # 50 files to specific bucket
-    python scripts/seed_test_data.py --count 200              # 200 files
-    python scripts/seed_test_data.py --prefix test-data/      # upload into a folder
-    python scripts/seed_test_data.py --cleanup                # delete all test files created by this script
+    python3 scripts/seed_test_data.py                          # 50 files to first accessible bucket
+    python3 scripts/seed_test_data.py --bucket my-bucket       # 50 files to specific bucket
+    python3 scripts/seed_test_data.py --count 200              # 200 files
+    python3 scripts/seed_test_data.py --prefix test-data/      # upload into a folder
+    python3 scripts/seed_test_data.py --cleanup                # delete all test files created by this script
 
 Reads S3 credentials from your .env file automatically.
 """

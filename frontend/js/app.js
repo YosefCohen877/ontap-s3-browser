@@ -180,6 +180,7 @@ window.ServerFeatures = {
   delete_bucket: false,
   bucket_count: true,
   bucket_lifecycle: false,
+  object_tagging: false,
 };
 
 // Check backend health and feature flags
@@ -193,6 +194,7 @@ API.health()
       window.ServerFeatures.delete_bucket = !!data.features.delete_bucket;
       window.ServerFeatures.bucket_count = data.features.bucket_count !== false;
       window.ServerFeatures.bucket_lifecycle = !!data.features.bucket_lifecycle;
+      window.ServerFeatures.object_tagging = !!data.features.object_tagging;
       const createBucketBtn = document.getElementById('createBucketBtn');
       if (createBucketBtn) {
         createBucketBtn.hidden = !window.ServerFeatures.create_bucket;

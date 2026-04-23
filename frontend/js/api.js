@@ -95,5 +95,20 @@ window.API = (() => {
       }),
     deleteLifecycle: (bucket) =>
       _fetch(`/api/bucket/${encodeURIComponent(bucket)}/lifecycle`, { method: 'DELETE' }),
+    putObjectTags: (bucket, key, tags) =>
+      _fetch(
+        `/api/object/tags?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tags }),
+        },
+      ),
+    mergeObjectTagsBulk: (bucket, keys, tags) =>
+      _fetch('/api/objects/tags-merge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bucket, keys, tags }),
+      }),
   };
 })();
