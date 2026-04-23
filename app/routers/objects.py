@@ -11,6 +11,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, File, Form, UploadFile
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from app.auth import require_auth, enforce_bucket_access
 from app.config import get_settings
@@ -301,9 +302,6 @@ def delete_object(
             "message": info.message,
             "detail": info.detail,
         })
-
-
-from pydantic import BaseModel
 
 
 class BulkDeleteRequest(BaseModel):

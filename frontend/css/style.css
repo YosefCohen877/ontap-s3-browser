@@ -1109,11 +1109,8 @@ div.browser-toolbar-chip:active {
 .toast.info    { background: var(--clr-surface); border-color: var(--clr-info);    color: var(--clr-text);    }
 
 /* ══ 14. Utility classes ════════════════════════════════ */
-.text-mono  { font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace; }
 .text-muted { color: var(--clr-text-muted); }
 .text-sm    { font-size: .8125rem; }
-.mt-1 { margin-top: .25rem; }
-.mt-2 { margin-top: .5rem; }
 
 /* ══ 15. S3 Error Banner ════════════════════════════════ */
 /* Shown on the bucket list when ONTAP S3 is unreachable  */
