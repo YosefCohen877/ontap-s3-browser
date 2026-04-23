@@ -10,10 +10,11 @@ A self-hosted web UI for browsing, previewing, and managing objects on **NetApp 
 - **File preview** — Inline preview for text, JSON, images, PDFs, and video (MP4/WebM)
 - **Upload & delete** — Optional write operations, gated by feature flags
 - **Bucket permissions** — Automatically detects which buckets you can access and groups inaccessible ones separately
+- **Bucket lifecycle rules** — View, add, edit and delete S3 expiration rules (ONTAP 9.13.1+) with a version-aware banner that explains why it does not work on older versions
 - **Connection diagnostics** — Step-by-step probe (DNS → TCP → TLS → S3 API) with detailed error messages
 - **Deep linking** — Bookmark or share direct URLs to any bucket/folder; full SPA routing with browser back/forward
 - **Dark & light themes** — Toggle between dark and light mode
-- **Auto-refresh** — Configurable refresh interval with countdown ring
+- **Auto-refresh** — Optional interval (with countdown ring) while viewing objects inside a bucket; the bucket list uses manual refresh only
 - **Offline-friendly** — No external CDN dependencies; works fully air-gapped
 - **Restricted bucket mode** — Lock the instance to a single bucket via the endpoint URL
 
@@ -191,7 +192,9 @@ All settings are in `.env`. Key variables:
 | `ENABLE_UPLOAD` | — | `false` (read-only by default) |
 | `ENABLE_DELETE` | — | `false` (read-only by default) |
 | `ENABLE_CREATE_BUCKET` | — | `false` (read-only by default) |
+| `ENABLE_DELETE_BUCKET` | — | `false` (allow empty-bucket deletion from the UI) |
 | `ENABLE_BUCKET_COUNT` | — | `true` (show file count per bucket; disable for large buckets) |
+| `ENABLE_BUCKET_LIFECYCLE` | — | `false` (allow add/edit/delete of expiration rules; requires ONTAP 9.13.1+) |
 
 See `.env.example` for all options with documentation.
 
@@ -210,6 +213,45 @@ In this mode, the application will:
 - **Auto-Jump**: Skip the bucket list and go straight to the files.
 - **Strict Enforcement**: Block any API requests for other buckets (403 Forbidden).
 - **Diagnostics**: The connection test will specifically probe accessibility of that bucket.
+
+---
+
+## Bucket Lifecycle Rules
+
+Each bucket card in the UI shows a **Lifecycle** action (hover to reveal) that opens a rules manager similar to [S3 Browser](https://s3browser.com/bucket-lifecycle-configuration.aspx). Rules are managed via the standard S3 API (`PutBucketLifecycleConfiguration` / `GetBucketLifecycleConfiguration` / `DeleteBucketLifecycle`) using **the same ONTAP S3 access key** — no extra ONTAP admin credentials required.
+
+### What you can configure per rule
+
+- **Filter** — prefix, object tags (logical AND), size greater/less than
+- **Current versions** — expire after N days, or on a specific date, or remove expired delete markers
+- **Noncurrent versions** — delete noncurrent versions after N days, optionally retaining the newest N
+- **Other** — abort incomplete multipart uploads after N days
+
+### ONTAP version compatibility
+
+| ONTAP version | Lifecycle via S3 API | Notes |
+|---|---|---|
+| 9.8 – 9.10.1 | ❌ Not supported | No S3 lifecycle support at all |
+| 9.11.1 / 9.12.1 | ❌ Not supported | S3 API for buckets/objects exists but lifecycle rules are not yet available |
+| 9.13.1+ | ✅ Supported | Full S3 API CRUD (expiration actions only) |
+| 9.14.1+ | ✅ Supported | Also manageable via ONTAP System Manager |
+
+On unsupported versions the UI opens normally but shows a banner explaining the requirement. No errors, no extra configuration needed — once you upgrade ONTAP the feature starts working.
+
+### Not supported by ONTAP (intentionally omitted from the UI)
+
+- Storage-class transitions (`STANDARD_IA`, `ONEZONE_IA`, `INTELLIGENT_TIERING`, `GLACIER`, `DEEP_ARCHIVE`) — these are AWS-only storage tiers and ONTAP does not support them at any version.
+- S3 lifecycle on S3-NAS (multiprotocol) buckets or MetroCluster configurations — disallowed by ONTAP itself.
+
+### Enabling mutations
+
+Reading rules is always allowed. To enable Add / Edit / Delete, set in `.env`:
+
+```env
+ENABLE_BUCKET_LIFECYCLE=true
+```
+
+Sources: [NetApp ONTAP S3 supported actions](https://docs.netapp.com/us-en/ontap/s3-config/ontap-s3-supported-actions-reference.html), [TR-4814 S3 in ONTAP Best Practices](https://download.lenovo.com/storage/s3_in_ontap_best_practices.pdf).
 
 ---
 
@@ -239,9 +281,10 @@ ontap-s3-browser/
 │   ├── auth.py              ← HTTP Basic auth dependency
 │   ├── routers/
 │   │   ├── __init__.py
-│   │   ├── buckets.py       ← GET /api/buckets
+│   │   ├── buckets.py       ← GET /api/buckets, POST/DELETE /api/bucket
 │   │   ├── objects.py       ← GET /api/objects, /meta, /download
 │   │   ├── preview.py       ← GET /api/object/preview
+│   │   ├── lifecycle.py     ← GET/PUT/DELETE /api/bucket/{b}/lifecycle
 │   │   └── diagnostics.py   ← GET /api/health, /api/test-connection
 │   └── utils/
 │       ├── __init__.py
@@ -256,6 +299,7 @@ ontap-s3-browser/
 │       ├── buckets.js       ← Bucket grid view
 │       ├── browser.js       ← Object browser + detail pane
 │       ├── preview.js       ← Text/JSON/image/PDF/video preview
+│       ├── lifecycle.js     ← Bucket lifecycle rules modal
 │       └── diagnostics.js   ← Connection test view
 ├── certs/                   ← Drop custom CA .crt files here
 │   ├── .gitignore           ← Ignore cert files
@@ -404,8 +448,9 @@ Refer to [Traefik documentation](https://doc.traefik.io/traefik/) for full setup
 |---|---|---|
 | GET | `/api/health` | Liveness probe + feature flags |
 | GET | `/api/test-connection` | Step-by-step ONTAP connectivity test |
-| GET | `/api/buckets` | List all buckets (with access check) |
+| GET | `/api/buckets` | List all buckets (with access check); `?refresh=true` bypasses a short server cache |
 | POST | `/api/bucket?bucket=` | Create a bucket (when enabled) |
+| DELETE | `/api/bucket?bucket=` | Delete a bucket (when enabled). Add `purge_contents=true` to delete all objects/versions first |
 | GET | `/api/bucket-count?bucket=` | Object count for a bucket (when enabled) |
 | GET | `/api/objects?bucket=&prefix=&search=&sort=&order=` | List objects/prefixes |
 | GET | `/api/object/meta?bucket=&key=` | HEAD object metadata |
@@ -413,6 +458,9 @@ Refer to [Traefik documentation](https://doc.traefik.io/traefik/) for full setup
 | GET | `/api/object/preview?bucket=&key=` | In-browser preview (text/image/PDF/video) |
 | POST | `/api/object/upload` | Upload a file (when enabled) |
 | DELETE | `/api/object?bucket=&key=` | Delete an object (when enabled) |
+| GET | `/api/bucket/{bucket}/lifecycle` | Get bucket lifecycle rules (ONTAP 9.13.1+) |
+| PUT | `/api/bucket/{bucket}/lifecycle` | Replace all lifecycle rules (when enabled) |
+| DELETE | `/api/bucket/{bucket}/lifecycle` | Remove all lifecycle rules (when enabled) |
 | GET | `/api/docs` | FastAPI interactive docs (Swagger UI) |
 
 All routes except `/api/health` require HTTP Basic Auth.

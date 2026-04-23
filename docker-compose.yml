@@ -43,15 +43,14 @@ services:
         max-file: "5"
 
 #You can add more services here, such as a local MinIO server for testing, but remember to adjust the S3 endpoint in your app's configuration accordingly.
-#  mini:
-#    container_name: mini
-#    image: docker.io/minio/minio
-#    command: server /data
-#    ports:
-#      - 9000:9000
-#      - 9001:9001
-#    environment:
-#      - MINIO_ACCESS_KEY=s3manager
-#      - MINIO_SECRET_KEY=s3manager
-#      - MINIO_ADDRESS=0.0.0.0:9000
-#      - MINIO_CONSOLE_ADDRESS=0.0.0.0:9001
+ # mini:
+ #   container_name: mini
+ #   image: bitnamilegacy/minio:2024.9.9
+ #   ports:
+ #     - 9000:9000
+ #     - 9001:9001
+ #   environment:
+ #     - MINIO_ROOT_USER=s3manager
+ #     - MINIO_ROOT_PASSWORD=s3manager
+ #     - MINIO_ADDRESS=0.0.0.0:9000
+ #     - MINIO_CONSOLE_ADDRESS=0.0.0.0:9001

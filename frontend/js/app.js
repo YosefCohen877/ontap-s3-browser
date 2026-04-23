@@ -45,7 +45,13 @@ function showView(name) {
   navBtns.forEach(btn => {
     btn.classList.toggle('active', btn.dataset.view === name);
   });
+  const was = AppState.currentView;
   AppState.currentView = name;
+  if (was === 'browser' && name !== 'browser') {
+    window.AutoRefresh?.onViewHidden?.();
+  } else if (name === 'browser' && was !== 'browser') {
+    window.AutoRefresh?.onViewVisible?.();
+  }
 }
 
 // Nav button clicks
@@ -167,7 +173,14 @@ window.renderError = function(err, container) {
 initTheme();
 
 // Global feature flags
-window.ServerFeatures = { upload: false, delete: false, create_bucket: false, bucket_count: true };
+window.ServerFeatures = {
+  upload: false,
+  delete: false,
+  create_bucket: false,
+  delete_bucket: false,
+  bucket_count: true,
+  bucket_lifecycle: false,
+};
 
 // Check backend health and feature flags
 API.health()
@@ -177,7 +190,9 @@ API.health()
       window.ServerFeatures.upload = !!data.features.upload;
       window.ServerFeatures.delete = !!data.features.delete;
       window.ServerFeatures.create_bucket = !!data.features.create_bucket;
+      window.ServerFeatures.delete_bucket = !!data.features.delete_bucket;
       window.ServerFeatures.bucket_count = data.features.bucket_count !== false;
+      window.ServerFeatures.bucket_lifecycle = !!data.features.bucket_lifecycle;
       const createBucketBtn = document.getElementById('createBucketBtn');
       if (createBucketBtn) {
         createBucketBtn.hidden = !window.ServerFeatures.create_bucket;
@@ -212,61 +227,57 @@ homeBtn?.addEventListener('click', () => {
 
 // ── Auto-refresh engine ────────────────────────────────────────────────────
 window.AutoRefresh = (() => {
-  const CIRCUMFERENCE = 75.4; // 2π × r=12
+  const CIRCUMFERENCE = 2 * Math.PI * 9; // matches refresh-ring circle r="9"
 
-  const selectEls   = document.querySelectorAll('.refresh-select');
-  const ringEls     = document.querySelectorAll('.refresh-ring');
-  const ringFills   = document.querySelectorAll('.refresh-ring__fill');
-  const lastLabels  = document.querySelectorAll('.refresh-last');
+  const refreshBar   = document.querySelector('#viewBrowser .browser-layout__refresh');
+  const selectEl     = document.getElementById('browserAutoRefreshSelect');
+  const ringEl       = refreshBar?.querySelector('.refresh-ring');
+  const ringFill     = refreshBar?.querySelector('.refresh-ring__fill');
+  const lastLabel    = document.getElementById('browserLastRefreshLabel');
 
   let _intervalSec = 0;   // 0 = off
   let _remaining   = 0;   // seconds left until next refresh
   let _tickTimer   = null;
 
+  function _haltTimer() {
+    if (_tickTimer) { clearInterval(_tickTimer); _tickTimer = null; }
+  }
+
   // ── Countdown ring animation ─────────────────────────────────────────────
   function _setRing(fraction) {
-    // fraction 0 = empty, 1 = full
+    if (!ringFill) return;
     const offset = CIRCUMFERENCE * (1 - fraction);
-    ringFills.forEach(ringFill => {
-      ringFill.style.strokeDashoffset = offset;
-    });
+    ringFill.style.strokeDashoffset = offset;
   }
 
   function _setActive(active) {
-    ringEls.forEach(ringEl => {
-      ringEl.classList.toggle('refresh-ring--active', active);
-    });
+    if (ringEl) ringEl.classList.toggle('refresh-ring--active', active);
     if (!active) _setRing(0);
   }
 
-  // ── Last-refreshed label ─────────────────────────────────────────────────
+  // ── Last-refreshed label (browser object list only — not the pager) ─────
   function _markRefreshed() {
+    if (!lastLabel) return;
     const now = new Date();
     const hh  = String(now.getHours()).padStart(2, '0');
     const mm  = String(now.getMinutes()).padStart(2, '0');
     const ss  = String(now.getSeconds()).padStart(2, '0');
-    const text = `${hh}:${mm}:${ss}`;
-    lastLabels.forEach(lastLabel => {
-      lastLabel.textContent = text;
-      lastLabel.hidden = false;
-    });
+    lastLabel.textContent = `${hh}:${mm}:${ss}`;
+    lastLabel.hidden = false;
   }
 
   // ── Trigger a refresh of the current view ────────────────────────────────
+  // Auto-refresh applies while viewing objects inside a bucket (not on the bucket list).
   function _doRefresh() {
-    const view = AppState.currentView;
-    if (view === 'buckets') {
-      window.BucketView?.load();
-    } else if (view === 'browser') {
-      window.BrowserView?.load(AppState.currentBucket, AppState.currentPrefix);
-    }
-    // diagnostics view: don't auto-run connection tests automatically
+    if (AppState.currentView !== 'browser' || !AppState.currentBucket) return;
+    window.BrowserView?.load(AppState.currentBucket, AppState.currentPrefix, true);
     _markRefreshed();
   }
 
   // ── Per-second tick ───────────────────────────────────────────────────────
   function _tick() {
     if (_intervalSec === 0) return;
+    if (AppState.currentView !== 'browser') return;
     _remaining--;
     _setRing(_remaining / _intervalSec);
 
@@ -278,14 +289,14 @@ window.AutoRefresh = (() => {
 
   // ── Start / stop ──────────────────────────────────────────────────────────
   function _stop() {
-    if (_tickTimer) { clearInterval(_tickTimer); _tickTimer = null; }
+    _haltTimer();
     _intervalSec = 0;
     _remaining   = 0;
     _setActive(false);
   }
 
   function _start(seconds) {
-    _stop();
+    _haltTimer();
     if (!seconds) return;
     _intervalSec = seconds;
     _remaining   = seconds;
@@ -294,7 +305,23 @@ window.AutoRefresh = (() => {
     _tickTimer = setInterval(_tick, 1000);
   }
 
-  // ── Public: called by BucketView / BrowserView after a successful load ───
+  /** Pause the ticking interval when leaving the object browser (saves CPU). */
+  function onViewHidden() {
+    _haltTimer();
+    _setActive(false);
+    _setRing(0);
+  }
+
+  /** Resume countdown when entering the object browser if an interval is armed. */
+  function onViewVisible() {
+    if (_intervalSec <= 0 || _tickTimer) return;
+    _remaining = _intervalSec;
+    _setRing(1);
+    _setActive(true);
+    _tickTimer = setInterval(_tick, 1000);
+  }
+
+  // ── Public: called by BrowserView after a successful object list load ───
   function notifyRefreshed() {
     _markRefreshed();
     // Reset countdown so we always measure from the last *actual* refresh
@@ -305,31 +332,31 @@ window.AutoRefresh = (() => {
   }
 
   function _setSelectValues(val) {
-    selectEls.forEach(el => el.value = String(val));
+    if (selectEl) selectEl.value = String(val);
   }
 
-  // ── Restore persisted interval on load ────────────────────────────────────
+  // ── Restore persisted interval (timer starts only on the browser view) ───
   const saved = parseInt(localStorage.getItem('s3b-refresh') || '0', 10);
   if (saved) {
     _setSelectValues(saved);
-    _start(saved);
+    _intervalSec = saved;
+    _remaining = saved;
   }
 
   // ── Dropdown change ─────────────────────────────────────────────────────
-  selectEls.forEach(selectEl => {
+  if (selectEl) {
     selectEl.addEventListener('change', (e) => {
       const sec = parseInt(e.target.value, 10);
-      _setSelectValues(sec); // sync other selectors
+      _setSelectValues(sec);
       localStorage.setItem('s3b-refresh', String(sec));
       if (sec === 0) {
         _stop();
       } else {
         _start(sec);
-        // Immediately do a refresh when switching interval on
         _doRefresh();
       }
     });
-  });
+  }
 
-  return { notifyRefreshed, stop: _stop, start: _start };
+  return { notifyRefreshed, stop: _stop, start: _start, onViewHidden, onViewVisible };
 })();

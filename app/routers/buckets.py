@@ -6,6 +6,7 @@ from __future__ import annotations
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.auth import enforce_bucket_access, require_auth
@@ -23,6 +24,65 @@ _bucket_count_cache: dict[str, tuple[int, float]] = {}
 _buckets_cache: dict | None = None
 _buckets_cache_ts: float = 0.0
 BUCKETS_CACHE_TTL_SECONDS = 30
+
+
+def _delete_objects_batch(client, bucket: str, objects: list[dict]) -> None:
+    if not objects:
+        return
+    for i in range(0, len(objects), 1000):
+        chunk = objects[i : i + 1000]
+        resp = client.delete_objects(Bucket=bucket, Delete={"Objects": chunk, "Quiet": True})
+        errs = resp.get("Errors") or []
+        if errs:
+            first = errs[0]
+            raise RuntimeError(
+                f"delete_objects failed for {first.get('Key')}: {first.get('Code')} — {first.get('Message')}"
+            )
+
+
+def _purge_bucket_contents(client, bucket: str) -> None:
+    """
+    Remove every object version, delete marker, and current key; abort multipart uploads.
+    Falls back to list_objects_v2 only if list_object_versions is not supported.
+    """
+    use_versions = True
+    try:
+        client.list_object_versions(Bucket=bucket, MaxKeys=1)
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code", "")
+        if code in ("NotImplemented", "NotSupported", "UnsupportedOperation", "InvalidArgument", "AccessNotSupported"):
+            use_versions = False
+            logger.info("bucket.purge.list_versions_unavailable", bucket=bucket, code=code)
+        else:
+            raise
+
+    if use_versions:
+        paginator = client.get_paginator("list_object_versions")
+        for page in paginator.paginate(Bucket=bucket):
+            objs: list[dict] = []
+            for v in page.get("Versions") or []:
+                objs.append({"Key": v["Key"], "VersionId": v["VersionId"]})
+            for m in page.get("DeleteMarkers") or []:
+                objs.append({"Key": m["Key"], "VersionId": m["VersionId"]})
+            _delete_objects_batch(client, bucket, objs)
+    else:
+        paginator = client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=bucket):
+            contents = page.get("Contents") or []
+            objs = [{"Key": o["Key"]} for o in contents]
+            _delete_objects_batch(client, bucket, objs)
+
+    try:
+        mpu = client.get_paginator("list_multipart_uploads")
+        for page in mpu.paginate(Bucket=bucket):
+            for up in page.get("Uploads") or []:
+                client.abort_multipart_upload(
+                    Bucket=bucket,
+                    Key=up["Key"],
+                    UploadId=up["UploadId"],
+                )
+    except Exception as exc:
+        logger.warning("bucket.purge.multipart_abort", bucket=bucket, error=str(exc))
 
 
 @router.post("/bucket")
@@ -86,8 +146,73 @@ def create_bucket(
         })
 
 
+@router.delete("/bucket")
+def delete_bucket(
+    bucket: str = Query(..., min_length=3, max_length=63, description="Bucket name to delete"),
+    purge_contents: bool = Query(
+        False,
+        description="If true, delete all objects/versions first, then remove the bucket",
+    ),
+    username: str = Depends(require_auth),
+):
+    """Delete an S3 bucket (empty only unless purge_contents is true)."""
+    cfg = get_settings()
+    if not cfg.enable_delete_bucket:
+        raise HTTPException(status_code=403, detail={
+            "category": "feature_disabled",
+            "title": "Bucket Deletion Disabled",
+            "message": "Deleting buckets is disabled for this deployment.",
+            "detail": "Set ENABLE_DELETE_BUCKET=true to enable this feature.",
+        })
+    if cfg.s3_forced_bucket:
+        raise HTTPException(status_code=403, detail={
+            "category": "feature_disabled",
+            "title": "Bucket Deletion Disabled",
+            "message": "Bucket deletion is disabled in forced bucket mode.",
+            "detail": f"This instance is locked to bucket: {cfg.s3_forced_bucket}",
+        })
+
+    enforce_bucket_access(bucket)
+
+    try:
+        global _buckets_cache
+        client = get_s3_client()
+        if purge_contents:
+            logger.info("bucket.delete.purge_start", bucket=bucket, user=username)
+            try:
+                _purge_bucket_contents(client, bucket)
+            except Exception as exc:
+                info = classify_exception(exc)
+                logger.error("bucket.delete.purge_failed", bucket=bucket, category=info.category)
+                raise HTTPException(status_code=info.http_code, detail={
+                    "category": info.category,
+                    "title": "Failed to empty bucket",
+                    "message": info.message,
+                    "detail": info.detail,
+                }) from exc
+            logger.info("bucket.delete.purge_done", bucket=bucket, user=username)
+
+        client.delete_bucket(Bucket=bucket)
+        _buckets_cache = None
+        _bucket_count_cache.pop(bucket, None)
+        logger.info("bucket.delete.success", bucket=bucket, user=username, purged=purge_contents)
+        return {"status": "ok", "bucket": bucket, "purged": purge_contents}
+    except Exception as exc:
+        info = classify_exception(exc)
+        logger.error("bucket.delete.error", category=info.category, detail=info.detail, bucket=bucket)
+        raise HTTPException(status_code=info.http_code, detail={
+            "category": info.category,
+            "title": info.title,
+            "message": info.message,
+            "detail": info.detail,
+        })
+
+
 @router.get("/buckets")
-def list_buckets(username: str = Depends(require_auth)):
+def list_buckets(
+    refresh: bool = Query(False, description="Bypass server-side bucket list cache"),
+    username: str = Depends(require_auth),
+):
     """Return all buckets accessible with the configured credentials."""
     global _buckets_cache, _buckets_cache_ts
     try:
@@ -102,9 +227,15 @@ def list_buckets(username: str = Depends(require_auth)):
 
         # Return server-side cache if fresh
         now = time.time()
-        if _buckets_cache and (now - _buckets_cache_ts) <= BUCKETS_CACHE_TTL_SECONDS:
+        if (
+            not refresh
+            and _buckets_cache
+            and (now - _buckets_cache_ts) <= BUCKETS_CACHE_TTL_SECONDS
+        ):
             logger.info("buckets.list.cache_hit", age=int(now - _buckets_cache_ts), user=username)
             return _buckets_cache
+        if refresh:
+            logger.info("buckets.list.cache_bypass", user=username)
 
         client = get_s3_client()
 

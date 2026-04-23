@@ -46,9 +46,15 @@ window.API = (() => {
   return {
     health:          ()         => _fetch('/api/health'),
     testConnection:  ()         => _fetch('/api/test-connection'),
-    listBuckets:     ()         => _fetch('/api/buckets'),
+    listBuckets:     (refresh = false) =>
+      _fetch(`/api/buckets${refresh ? '?refresh=true' : ''}`),
     createBucket:    (bucket)   =>
       _fetch(`/api/bucket?bucket=${encodeURIComponent(bucket)}`, { method: 'POST' }),
+    deleteBucket:    (bucket, options = {}) => {
+      const q = new URLSearchParams({ bucket });
+      if (options.purgeContents) q.set('purge_contents', 'true');
+      return _fetch(`/api/bucket?${q}`, { method: 'DELETE' });
+    },
     listObjects:     (bucket, prefix = '', search = '', sort = 'name', order = 'asc', pageSize = 20, continuationToken = '') =>
       _fetch(`/api/objects?bucket=${encodeURIComponent(bucket)}&prefix=${encodeURIComponent(prefix)}&search=${encodeURIComponent(search)}&sort=${sort}&order=${order}&page_size=${pageSize}${continuationToken ? `&continuation_token=${encodeURIComponent(continuationToken)}` : ''}`),
     objectMeta:      (bucket, key) =>
@@ -79,5 +85,15 @@ window.API = (() => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bucket, keys }),
       }),
+    getLifecycle:    (bucket) =>
+      _fetch(`/api/bucket/${encodeURIComponent(bucket)}/lifecycle`),
+    putLifecycle:    (bucket, rules) =>
+      _fetch(`/api/bucket/${encodeURIComponent(bucket)}/lifecycle`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rules }),
+      }),
+    deleteLifecycle: (bucket) =>
+      _fetch(`/api/bucket/${encodeURIComponent(bucket)}/lifecycle`, { method: 'DELETE' }),
   };
 })();

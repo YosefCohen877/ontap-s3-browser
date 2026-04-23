@@ -120,6 +120,33 @@ def classify_exception(exc: Exception) -> S3ErrorInfo:
     if isinstance(exc, botocore.exceptions.ClientError):
         code = exc.response.get("Error", {}).get("Code", "Unknown")
         msg = exc.response.get("Error", {}).get("Message", exc_str)
+        op_name = getattr(exc, "operation_name", "") or ""
+        is_lifecycle_op = "Lifecycle" in op_name
+
+        if code == "NoSuchLifecycleConfiguration":
+            return S3ErrorInfo(
+                category="lifecycle_not_configured",
+                title="No Lifecycle Configuration",
+                message="This bucket has no lifecycle rules configured.",
+                detail=f"[{code}] {msg}",
+                http_code=404,
+            )
+
+        if code == "NotImplemented" and is_lifecycle_op:
+            return S3ErrorInfo(
+                category="lifecycle_not_supported",
+                title="Lifecycle Not Supported on This ONTAP Version",
+                message=(
+                    "ONTAP S3 returned NotImplemented for this lifecycle operation. "
+                    "Bucket lifecycle management requires ONTAP 9.13.1 or newer. "
+                    "ONTAP 9.8 through 9.12.1 do not support S3 lifecycle rules at all "
+                    "(GET, PUT and DELETE all return NotImplemented). "
+                    "Note: ONTAP does not support transitions to STANDARD_IA / GLACIER / "
+                    "DEEP_ARCHIVE at any version \u2014 only expiration actions."
+                ),
+                detail=f"[{code}] {msg}",
+                http_code=501,
+            )
 
         if code == "NotImplemented":
             return S3ErrorInfo(

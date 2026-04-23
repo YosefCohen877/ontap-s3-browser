@@ -56,7 +56,9 @@ def health():
             "upload": cfg.enable_upload,
             "delete": cfg.enable_delete,
             "create_bucket": cfg.enable_create_bucket,
+            "delete_bucket": cfg.enable_delete_bucket,
             "bucket_count": cfg.enable_bucket_count,
+            "bucket_lifecycle": cfg.enable_bucket_lifecycle,
         }
     }
 
